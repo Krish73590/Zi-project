@@ -11,9 +11,6 @@ import mycred as mc
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
-from enum import Enum
-from datetime import date
-from pydantic import EmailStr
 
 # Database setup
 DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.dbname}"
@@ -36,20 +33,6 @@ class UserLogin(BaseModel):
     employee_id: str
     password: str
 
-class UserRegister(BaseModel):
-    employee_id: str
-    employee_name: str
-    first_name: str
-    last_name: str
-    email: EmailStr
-    password: str
-    date_of_birth: date
-    date_of_join: date
-    designation: str
-    department: str
-    blood_group: str
-    mobile_no: str
-    role: str
 # Dependency to get the current session
 def get_db():
     db = SessionLocal()
@@ -75,78 +58,8 @@ async def login(user_login: UserLogin, db: Session = Depends(get_db)):
         return {"message": "Login successful", "user_type": user["role"]}
     raise HTTPException(status_code=400, detail="Invalid credentials")
 
-# @app.post("/register/")
-# async def register(user_register: UserRegister, db: Session = Depends(get_db)):
-#     # Check if user already exists
-#     existing_user = await get_user_from_db(user_register.employee_id, db)
-#     if existing_user:
-#         raise HTTPException(status_code=400, detail="Employee ID already exists")
-
-#     # Insert new user into the database with role 'user_a'
-#     query = text("""
-#         INSERT INTO ia_users (
-#             employee_id, password, role, employee_name, first_name, last_name,
-#             email, date_of_birth, date_of_join, designation, department,
-#             blood_group, mobile_no
-#         )
-#         VALUES (
-#             :employee_id, :password, :role, :employee_name, :first_name, :last_name,
-#             :email, :date_of_birth, :date_of_join, :designation, :department,
-#             :blood_group, :mobile_no
-#         )
-#     """)
-#     db.execute(query, {
-#         "employee_id": user_register.employee_id,
-#         "password": user_register.password,
-#         "role": "user_a",  # Default role
-#         "employee_name": user_register.employee_name,
-#         "first_name": user_register.first_name,
-#         "last_name": user_register.last_name,
-#         "email": user_register.email,
-#         "date_of_birth": user_register.date_of_birth,
-#         "date_of_join": user_register.date_of_join,
-#         "designation": user_register.designation,
-#         "department": user_register.department,
-#         "blood_group": user_register.blood_group,
-#         "mobile_no": user_register.mobile_no,
-#     })
-#     db.commit()
-
-#     return {"message": "Registration successful"}
-
-@app.post("/register/")
-async def register(user_register: UserRegister, db: Session = Depends(get_db)):
-    # Check if user already exists
-    existing_user = await get_user_from_db(user_register.employee_id, db)
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Employee ID already exists")
-
-    # Insert new user into the database with role 'user_a'
-    query = text("""
-        INSERT INTO ia_users (employee_id, password, employee_name, first_name, last_name, email, date_of_birth, date_of_join, designation, department, blood_group, mobile_no,role)
-        VALUES (:employee_id, :password, :employee_name, :first_name, :last_name, :email, :date_of_birth, :date_of_join, :designation, :department, :blood_group, :mobile_no,:role)
-    """)
-    db.execute(query, {
-        "employee_id": user_register.employee_id,
-        "password": user_register.password,
-        "employee_name": user_register.employee_name,
-        "first_name": user_register.first_name,
-        "last_name": user_register.last_name,
-        "email": user_register.email,
-        "date_of_birth": user_register.date_of_birth,
-        "date_of_join": user_register.date_of_join,
-        "designation": user_register.designation,
-        "department": user_register.department,
-        "blood_group": user_register.blood_group,
-        "mobile_no": user_register.mobile_no,
-        "role": user_register.role,
-    })
-    db.commit()
-
-    return {"message": "Registration successful"}
-
 # Endpoint to fetch table columns
-@app.get("/contact-columns/")
+@app.get("/columns/")
 async def get_columns():
     try:
         inspector = inspect(engine)
@@ -154,65 +67,33 @@ async def get_columns():
         return {"columns": columns}
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-    
-@app.get("/company-columns/")
-async def get_columns():
-    try:
-        inspector = inspect(engine)
-        columns = [column['name'] for column in inspector.get_columns('tbl_zoominfo_company_paid')]
-        return {"columns": columns}
-    except Exception as e:
-        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-class TableType(str, Enum):
-    company = "Company"
-    contact = "Contact"
 # File Upload Endpoint for User A
 @app.post("/upload/user_a/")
 async def upload_file_user_a(
     file: UploadFile = File(...),
-    table_type: TableType = Form(...),
     selected_columns: str = Form(''),
-    match_contact_domain: bool = Form(False),
-    match_company_domain: bool = Form(False),
+    match_domain: bool = Form(False),
     match_linkedin_url: bool = Form(False),
     match_zi_contact_id: bool = Form(False),
-    match_company_name: bool = Form(False),
     db: Session = Depends(get_db)
-):  
-    if table_type == TableType.contact:
-        return await process_upload(
-            file, selected_columns, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
-        )
-    elif table_type == TableType.company:
-        return await process_company_upload(
-            file, selected_columns, match_company_domain, match_company_name, db
-        )
+):
+    return await process_upload(file, selected_columns, match_domain, match_linkedin_url, match_zi_contact_id, db)
 
 # File Upload Endpoint for User B
 @app.post("/upload/user_b/")
 async def upload_file_user_b(
     file: UploadFile = File(...),
-    table_type: TableType = Form(...),
     selected_columns: str = Form(''),
-    match_contact_domain: bool = Form(False),
-    match_company_domain: bool = Form(False),
+    match_domain: bool = Form(False),
     match_linkedin_url: bool = Form(False),
     match_zi_contact_id: bool = Form(False),
-    match_company_name: bool = Form(False),
     db: Session = Depends(get_db)
 ):
-    if table_type == TableType.contact:
-        return await process_upload(
-            file, selected_columns, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
-        )
-    elif table_type == TableType.company:
-        return await process_company_upload(
-            file, selected_columns, match_company_domain, match_company_name, db
-        )
+    return await process_upload(file, selected_columns, match_domain, match_linkedin_url, match_zi_contact_id, db)
 
-# Common processing logic for file uploads  
+# Common processing logic for file uploads
 async def process_upload(
     file: UploadFile,
     selected_columns: str,
@@ -251,17 +132,9 @@ async def process_upload(
             params["linkedin_url"] = row['linkedin_url']
         if match_zi_contact_id:
             try:
-                # Check if the value can be converted to an integer
-                if isinstance(row['zi_contact_id'], (float, int)):
-                    row['zi_contact_id'] = str(int(row['zi_contact_id']))
-                else:
-                    row['zi_contact_id'] = str(row['zi_contact_id'])
-            except (ValueError, TypeError):
+                row['zi_contact_id'] = str(int(row['zi_contact_id']))
+            except :
                 row['zi_contact_id'] = str(row['zi_contact_id'])
-            
-            conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
-            params["zi_contact_id"] = row['zi_contact_id']
-    
             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
             params["zi_contact_id"] = row['zi_contact_id']
             
@@ -274,59 +147,6 @@ async def process_upload(
 
         query = f"""
         SELECT {select_columns} FROM tbl_zoominfo_contact_paid
-        WHERE {where_clause}
-        """
-        
-        try:
-            result = db.execute(text(query).params(params)).fetchall()
-            columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
-            results.extend([dict(zip(columns, row)) for row in result])
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            return JSONResponse(content={"error": str(e)}, status_code=500)
-    return {"matches": results}
-
-async def process_company_upload(
-    file: UploadFile,
-    selected_columns: str,
-    match_domain: bool,
-    match_company_name: bool,
-    db: Session
-):
-    df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
-    # df = df.astype(str)
- 
-    df = df.where(pd.notnull(df), None)
-
-    if not all(col in df.columns for col in ['domain', 'company_name']):
-        return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
-
-    selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
-    if not selected_columns:
-        return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
-
-    results = []
-
-    for _, row in df.iterrows():
-        conditions = []
-        params = {}
-
-        if match_domain:
-            conditions.append("\"Website\" = :domain")
-            params["domain"] = row['domain']
-        if match_company_name:
-            conditions.append("\"Company Name\" = :company_name")
-            params["company_name"] = row['company_name']
-            
-            
-        if not conditions:
-            conditions.append("0=1")
-
-        where_clause = " AND ".join(conditions)
-        select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
-
-        query = f"""
-        SELECT {select_columns} FROM tbl_zoominfo_company_paid
         WHERE {where_clause}
         """
         
@@ -354,9 +174,12 @@ db_config = {
 def connect_db():
     return psycopg2.connect(**db_config)
 
-
+from enum import Enum
 
 # Define an enum for valid table types
+class TableType(str, Enum):
+    company = "Company"
+    contact = "Contact"
     
 @app.post("/import/")
 async def import_data(

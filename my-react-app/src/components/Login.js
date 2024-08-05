@@ -1,16 +1,9 @@
-import React, { useState } from 'react';
+// Login.js
+import React, { useState, useContext } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
-import { 
-  Box, 
-  Button, 
-  FormControl, 
-  FormLabel, 
-  Input, 
-  Stack, 
-  Text, 
-  useToast 
-} from '@chakra-ui/react';
+import { Box, Button, FormControl, FormLabel, Input, Stack, Text, useToast } from '@chakra-ui/react';
+import AuthContext from '../AuthContext';
 
 const Login = () => {
   const [employeeId, setEmployeeId] = useState('');
@@ -18,6 +11,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
   const toast = useToast();
+  const { login } = useContext(AuthContext);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -27,6 +21,7 @@ const Login = () => {
         password: password,
       });
       const { user_type } = response.data;
+      login({ employeeId, role: user_type });
       if (user_type === 'user_a') {
         navigate('/upload/user_a');
       } else if (user_type === 'user_b') {
@@ -54,22 +49,8 @@ const Login = () => {
   };
 
   return (
-    <Box 
-      display="flex" 
-      alignItems="center" 
-      justifyContent="center" 
-      height="100vh" 
-      bg="gray.50"
-    >
-      <Box 
-        p={6} 
-        borderWidth={1} 
-        borderRadius="md" 
-        boxShadow="lg" 
-        bg="white"
-        width="100%" 
-        maxWidth="400px"
-      >
+    <Box display="flex" alignItems="center" justifyContent="center" height="100vh" bg="gray.50">
+      <Box p={6} borderWidth={1} borderRadius="md" boxShadow="lg" bg="white" width="100%" maxWidth="400px">
         <Stack spacing={4}>
           <Text fontSize="2xl" fontWeight="bold" textAlign="center">
             Login
@@ -78,30 +59,33 @@ const Login = () => {
             <Stack spacing={4}>
               <FormControl id="employee_id" isRequired>
                 <FormLabel>Employee ID</FormLabel>
-                <Input 
-                  type="text" 
-                  value={employeeId} 
-                  onChange={(e) => setEmployeeId(e.target.value)} 
+                <Input
+                  type="text"
+                  value={employeeId}
+                  onChange={(e) => setEmployeeId(e.target.value)}
                 />
               </FormControl>
               <FormControl id="password" isRequired>
                 <FormLabel>Password</FormLabel>
-                <Input 
-                  type="password" 
-                  value={password} 
-                  onChange={(e) => setPassword(e.target.value)} 
+                <Input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
               </FormControl>
-              <Button 
-                type="submit" 
-                colorScheme="blue" 
-                width="full"
-              >
+              <Button type="submit" colorScheme="blue" width="full">
                 Login
               </Button>
             </Stack>
           </form>
           {error && <Text color="red.500" textAlign="center">{error}</Text>}
+          <Button 
+            variant="link" 
+            colorScheme="blue" 
+            onClick={() => navigate('/register')}
+          >
+            Don't have an account? Register here
+          </Button>
         </Stack>
       </Box>
     </Box>
