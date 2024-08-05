@@ -1,0 +1,11 @@
+dbname="postgres"
+user="postgres"
+password="Password123*"
+host="localhost"
+port="5432"
+
+# dbname="data_assets"
+# user="ia_krish"
+# password="Krg1206*"
+# host="192.168.3.243"
+# port="5432"
