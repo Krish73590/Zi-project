@@ -62,8 +62,8 @@ const FileUploadUserA = () => {
   const [displayedResults, setDisplayedResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
-
+  const [importloading, setimportLoading] = useState(false);
+  const [exportloading, setexportLoading] = useState(false);
   // State for Import functionality
   const [importFile, setImportFile] = useState(null);
   const [tableType, setTableType] = useState('Company');
@@ -174,7 +174,7 @@ const FileUploadUserA = () => {
     formData.append('match_zi_contact_id', matchZIContactID);
     formData.append('match_company_name', matchCompanyName);
 
-    setLoading(true);
+    setexportLoading(true);
     try {
       const response = await axios.post('http://localhost:8000/upload/user_a', formData, {
         headers: {
@@ -197,7 +197,7 @@ const FileUploadUserA = () => {
         isClosable: true,
       });
     } finally {
-      setLoading(false);
+      setexportLoading(false);
     }
   };
 
@@ -240,7 +240,7 @@ const FileUploadUserA = () => {
     formData.append('files', importFile);
     formData.append('table_type', tableType);
 
-    setLoading(true);
+    setimportLoading(true);
     try {
       const response = await axios.post('http://localhost:8000/import/', formData, {
         headers: {
@@ -265,7 +265,7 @@ const FileUploadUserA = () => {
         isClosable: true,
       });
     } finally {
-      setLoading(false);
+      setimportLoading(false);
     }
   };
 
@@ -291,8 +291,8 @@ const FileUploadUserA = () => {
                 <option value="Contact">Contact</option>
               </Select>
             </FormControl>
-            <Button colorScheme="teal" onClick={handleImportSubmit} isDisabled={loading}>
-              {loading ? <Spinner size="sm" /> : 'Import Data'}
+            <Button colorScheme="teal" onClick={handleImportSubmit} isDisabled={importloading}>
+              {importloading ? <Spinner size="sm" /> : 'Import Data'}
             </Button>
             {importMessages.length > 0 && (
               <Box mt={4}>
@@ -496,8 +496,8 @@ const FileUploadUserA = () => {
             )}
             
             
-            <Button colorScheme="teal" onClick={handleExportSubmit} isDisabled={loading}>
-              {loading ? <Spinner size="sm" /> : 'Export Data'}
+            <Button colorScheme="teal" onClick={handleExportSubmit} isDisabled={exportloading}>
+              {exportloading ? <Spinner size="sm" /> : 'Export Data'}
             </Button>
           </Stack>
         </Box>

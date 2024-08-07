@@ -61,7 +61,8 @@ const FileUpload = () => {
   const [displayedResults, setDisplayedResults] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [importloading, setimportLoading] = useState(false);
+  const [exportloading, setexportLoading] = useState(false);
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
   // const { isOpen: isPopoverOpen, onOpen: onPopoverOpen, onClose: onPopoverClose } = useDisclosure();
@@ -197,7 +198,7 @@ const FileUpload = () => {
     setFile(e.target.files[0]);
   };
 
-  const handleSubmit = async () => {
+  const handleExportSubmit = async () => {
     if (!file) {
       toast({
         title: 'Error',
@@ -223,7 +224,7 @@ const FileUpload = () => {
     formData.append('match_zi_contact_id', matchZIContactID);
     formData.append('match_company_name', matchCompanyName);
 
-    setLoading(true);
+    setexportLoading(true);
     try {
       const response = await axios.post('http://localhost:8000/upload/user_b', formData, {
         headers: {
@@ -246,7 +247,7 @@ const FileUpload = () => {
         isClosable: true,
       });
     } finally {
-      setLoading(false);
+      setexportLoading(false);
     }
   };
 
@@ -296,7 +297,7 @@ const FileUpload = () => {
       formData.append('files', importFile);
       formData.append('table_type', tableType);
   
-      setLoading(true);
+      setimportLoading(true);
       try {
         const response = await axios.post('http://localhost:8000/import/', formData, {
           headers: {
@@ -321,7 +322,7 @@ const FileUpload = () => {
           isClosable: true,
         });
       } finally {
-        setLoading(false);
+        setimportLoading(false);
       }
     };
     return (
@@ -342,8 +343,8 @@ const FileUpload = () => {
                   <option value="Contact">Contact</option>
                 </Select>
               </FormControl>
-              <Button colorScheme="teal" onClick={handleImportSubmit} isDisabled={loading}>
-                {loading ? <Spinner size="sm" /> : 'Import Data'}
+              <Button colorScheme="teal" onClick={handleImportSubmit} isDisabled={importloading}>
+                {importloading ? <Spinner size="sm" /> : 'Import Data'}
               </Button>
               {importMessages.length > 0 && (
                 <Box mt={4}>
@@ -621,7 +622,9 @@ const FileUpload = () => {
                   </FormControl>
                 </>
               )}
-              <Button colorScheme="teal" onClick={handleSubmit}>Submit</Button>
+              <Button colorScheme="teal" onClick={handleExportSubmit} isDisabled={exportloading}>
+              {exportloading ? <Spinner size="sm" /> : 'Export Data'}
+            </Button>
             </Stack>
           </Box>
         </Stack>

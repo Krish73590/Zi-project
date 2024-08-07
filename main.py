@@ -73,6 +73,7 @@ async def get_user_from_db(employee_id: str, db: Session) -> Optional[dict]:
 
 
 employee_id_store = {}
+
 # Login endpoint
 @app.post("/login/")
 async def login(user_login: UserLogin, db: Session = Depends(get_db)):
@@ -82,6 +83,7 @@ async def login(user_login: UserLogin, db: Session = Depends(get_db)):
         return {"message": "Login successful", "user_type": user["role"]    }
     raise HTTPException(status_code=400, detail="Invalid credentials")
 
+employee_id = employee_id_store.get('employee_id')
 @app.post("/register/")
 async def register(user_register: UserRegister, db: Session = Depends(get_db)):
     # Check if user already exists
@@ -302,9 +304,9 @@ async def process_upload(
     db: Session
 ):  
     filename = file.filename
-    employee_id = employee_id_store.get('employee_id')
-    # if not employee_id:
-    #     return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
+    # employee_id = employee_id_store.get('employee_id')
+    if not employee_id:
+        return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
@@ -409,8 +411,8 @@ async def process_company_upload(
 ):
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
-    # if not employee_id:
-    #     return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
+    if not employee_id:
+        return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
     
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
  
