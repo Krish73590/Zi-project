@@ -10,10 +10,12 @@ from io import BytesIO
 import mycred as mc
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.middleware.sessions import SessionMiddleware
 from typing import List, Optional
 from enum import Enum
 from datetime import date
 from pydantic import EmailStr
+from datetime import datetime
 
 # Database setup
 DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.dbname}"
@@ -31,6 +33,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(SessionMiddleware, secret_key="your_secret_key")
 # User login schema
 class UserLogin(BaseModel):
     employee_id: str
@@ -58,6 +61,7 @@ def get_db():
     finally:
         db.close()
 
+
 # Helper function to get user type
 async def get_user_from_db(employee_id: str, db: Session) -> Optional[dict]:
     query = text("SELECT password, role FROM ia_users WHERE employee_id = :employee_id")
@@ -67,52 +71,16 @@ async def get_user_from_db(employee_id: str, db: Session) -> Optional[dict]:
         return {"password": result[0], "role": result[1]}
     return None
 
+
+employee_id_store = {}
 # Login endpoint
 @app.post("/login/")
 async def login(user_login: UserLogin, db: Session = Depends(get_db)):
     user = await get_user_from_db(user_login.employee_id, db)
     if user and user_login.password == user["password"]:
-        return {"message": "Login successful", "user_type": user["role"]}
+        employee_id_store['employee_id'] = user_login.employee_id
+        return {"message": "Login successful", "user_type": user["role"]    }
     raise HTTPException(status_code=400, detail="Invalid credentials")
-
-# @app.post("/register/")
-# async def register(user_register: UserRegister, db: Session = Depends(get_db)):
-#     # Check if user already exists
-#     existing_user = await get_user_from_db(user_register.employee_id, db)
-#     if existing_user:
-#         raise HTTPException(status_code=400, detail="Employee ID already exists")
-
-#     # Insert new user into the database with role 'user_a'
-#     query = text("""
-#         INSERT INTO ia_users (
-#             employee_id, password, role, employee_name, first_name, last_name,
-#             email, date_of_birth, date_of_join, designation, department,
-#             blood_group, mobile_no
-#         )
-#         VALUES (
-#             :employee_id, :password, :role, :employee_name, :first_name, :last_name,
-#             :email, :date_of_birth, :date_of_join, :designation, :department,
-#             :blood_group, :mobile_no
-#         )
-#     """)
-#     db.execute(query, {
-#         "employee_id": user_register.employee_id,
-#         "password": user_register.password,
-#         "role": "user_a",  # Default role
-#         "employee_name": user_register.employee_name,
-#         "first_name": user_register.first_name,
-#         "last_name": user_register.last_name,
-#         "email": user_register.email,
-#         "date_of_birth": user_register.date_of_birth,
-#         "date_of_join": user_register.date_of_join,
-#         "designation": user_register.designation,
-#         "department": user_register.department,
-#         "blood_group": user_register.blood_group,
-#         "mobile_no": user_register.mobile_no,
-#     })
-#     db.commit()
-
-#     return {"message": "Registration successful"}
 
 @app.post("/register/")
 async def register(user_register: UserRegister, db: Session = Depends(get_db)):
@@ -213,6 +181,118 @@ async def upload_file_user_b(
         )
 
 # Common processing logic for file uploads  
+# async def process_upload(
+#     file: UploadFile,
+#     selected_columns: str,
+#     match_domain: bool,
+#     match_linkedin_url: bool,
+#     match_zi_contact_id: bool,
+#     db: Session
+# ):  
+#     filename = file.filename
+#     employee_id = employee_id_store.get('employee_id')  # Access the global variable
+#     if not employee_id:
+#         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
+    
+#     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+#     # df = df.astype(str)
+ 
+#     df = df.where(pd.notnull(df), None)
+
+#     if not all(col in df.columns for col in ['domain', 'first_name', 'last_name','linkedin_url','zi_contact_id']):
+#         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
+
+#     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
+#     if not selected_columns:
+#         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
+
+
+#     all_columns = set(df.columns) | set(selected_columns)
+#     missing_columns = all_columns - set(df.columns)
+#     if missing_columns:
+#         for col in missing_columns:
+#             df[col] = None
+            
+#     results = []
+#     import_time = datetime.now()
+#     for _, row in df.iterrows():
+#         conditions = []
+#         params = {}
+
+#         if match_domain:
+#             conditions.append("\"Website\" = :domain")
+#             params["domain"] = row['domain']
+#             conditions.append("\"First Name\" = :first_name")
+#             params["first_name"] = row['first_name']
+#             conditions.append("\"Last Name\" = :last_name")
+#             params["last_name"] = row['last_name']
+#         if match_linkedin_url:
+#             conditions.append("\"LinkedIn Contact Profile URL\" = :linkedin_url")
+#             params["linkedin_url"] = row['linkedin_url']
+#         if match_zi_contact_id:
+#             try:
+#                 # Check if the value can be converted to an integer
+#                 if isinstance(row['zi_contact_id'], (float, int)):
+#                     row['zi_contact_id'] = str(int(row['zi_contact_id']))
+#                 else:
+#                     row['zi_contact_id'] = str(row['zi_contact_id'])
+#             except (ValueError, TypeError):
+#                 row['zi_contact_id'] = str(row['zi_contact_id'])
+            
+#             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
+#             params["zi_contact_id"] = row['zi_contact_id']
+    
+#             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
+#             params["zi_contact_id"] = row['zi_contact_id']
+            
+            
+#         if not conditions:
+#             conditions.append("0=1")
+
+#         where_clause = " AND ".join(conditions)
+#         select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
+
+#         query = f"""
+#         SELECT {select_columns} FROM tbl_zoominfo_contact_paid
+#         WHERE {where_clause}
+#         """
+        
+#         try:
+#             result = db.execute(text(query).params(params)).fetchall()
+#             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
+#             results.extend([dict(zip(columns, row)) for row in result])
+#         except Exception as e:
+#             print(f"An error occurred: {e}")
+#             return JSONResponse(content={"error": str(e)}, status_code=500)
+        
+#     if results:
+#         df_export = pd.DataFrame()
+        
+
+#         # Assign values to selected columns, set other columns to None
+#         for column in selected_columns:
+#             df_export[column] = [result.get(column, None) for result in results]
+        
+#         # Ensure all other columns are set to None
+#         all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
+#         print(all_possible_columns)
+#         print(set(selected_columns))
+#         other_columns = all_possible_columns - set(selected_columns)
+#         for column in other_columns:
+#             df_export[column] = None
+
+#         try:
+#             print(df_export.columns)
+#             print(df_export.head())
+#             df_export['import_time'] = import_time
+#             df_export['employee_id'] = employee_id
+#             df_export['file_name'] = filename
+#             df_export.to_sql('tbl_export_records_zoominfo_contact_paid', db.get_bind(), if_exists='append', index=False)
+#         except Exception as e:
+#             print(f"An error occurred while inserting export records: {e}")
+#             return JSONResponse(content={"error": str(e)}, status_code=500)
+#     return {"matches": results}
+
 async def process_upload(
     file: UploadFile,
     selected_columns: str,
@@ -220,13 +300,15 @@ async def process_upload(
     match_linkedin_url: bool,
     match_zi_contact_id: bool,
     db: Session
-):
-    df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
-    # df = df.astype(str)
- 
-    df = df.where(pd.notnull(df), None)
+):  
+    filename = file.filename
+    employee_id = employee_id_store.get('employee_id')
+    # if not employee_id:
+    #     return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
-    if not all(col in df.columns for col in ['domain', 'first_name', 'last_name','linkedin_url','zi_contact_id']):
+    df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+    df = df.where(pd.notnull(df), None)
+    if not all(col in df.columns for col in ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
@@ -234,11 +316,11 @@ async def process_upload(
         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
 
     results = []
-
+    import_time = datetime.now()
+    
     for _, row in df.iterrows():
         conditions = []
         params = {}
-
         if match_domain:
             conditions.append("\"Website\" = :domain")
             params["domain"] = row['domain']
@@ -251,7 +333,6 @@ async def process_upload(
             params["linkedin_url"] = row['linkedin_url']
         if match_zi_contact_id:
             try:
-                # Check if the value can be converted to an integer
                 if isinstance(row['zi_contact_id'], (float, int)):
                     row['zi_contact_id'] = str(int(row['zi_contact_id']))
                 else:
@@ -261,10 +342,6 @@ async def process_upload(
             
             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
             params["zi_contact_id"] = row['zi_contact_id']
-    
-            conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
-            params["zi_contact_id"] = row['zi_contact_id']
-            
             
         if not conditions:
             conditions.append("0=1")
@@ -276,15 +353,52 @@ async def process_upload(
         SELECT {select_columns} FROM tbl_zoominfo_contact_paid
         WHERE {where_clause}
         """
-        
+
         try:
             result = db.execute(text(query).params(params)).fetchall()
             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
-            results.extend([dict(zip(columns, row)) for row in result])
+            for match in result:
+                match_dict = dict(zip(columns, match))
+                # Include the original uploaded data in the result
+                results.append({**dict(row), **match_dict})
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
+    
+    all_columns = set(df.columns) | set(selected_columns)
+    missing_columns = all_columns - set(df.columns)
+    if missing_columns:
+        for col in missing_columns:
+            df[col] = None 
+            
+            
+    if results:
+        df_export = pd.DataFrame()
+        
+
+        # Assign values to selected columns, set other columns to None
+        for column in selected_columns:
+            df_export[column] = [result.get(column, None) for result in results]
+        
+        # Ensure all other columns are set to None
+        all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
+        
+        other_columns = all_possible_columns - set(selected_columns)
+        for column in other_columns:
+            df_export[column] = None
+
+        try:
+            df_export['import_time'] = import_time
+            df_export['employee_id'] = employee_id
+            df_export['file_name'] = filename
+            df_export['process_tag'] = 'export'
+            df_export.to_sql('tbl_export_records_zoominfo_contact_paid', db.get_bind(), if_exists='append', index=False)
+        except Exception as e:
+            print(f"An error occurred while inserting export records: {e}")
+            return JSONResponse(content={"error": str(e)}, status_code=500)
     return {"matches": results}
+
+
 
 async def process_company_upload(
     file: UploadFile,
@@ -293,8 +407,12 @@ async def process_company_upload(
     match_company_name: bool,
     db: Session
 ):
+    filename = file.filename
+    employee_id = employee_id_store.get('employee_id')
+    # if not employee_id:
+    #     return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
+    
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
-    # df = df.astype(str)
  
     df = df.where(pd.notnull(df), None)
 
@@ -304,9 +422,10 @@ async def process_company_upload(
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
     if not selected_columns:
         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
-
+            
     results = []
-
+    import_time = datetime.now()
+    
     for _, row in df.iterrows():
         conditions = []
         params = {}
@@ -333,10 +452,45 @@ async def process_company_upload(
         try:
             result = db.execute(text(query).params(params)).fetchall()
             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
-            results.extend([dict(zip(columns, row)) for row in result])
+            for match in result:
+                match_dict = dict(zip(columns, match))
+                # Include the original uploaded data in the result
+                results.append({**dict(row), **match_dict})
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
+        
+    all_columns = set(df.columns) | set(selected_columns)
+    missing_columns = all_columns - set(df.columns)
+    if missing_columns:
+        for col in missing_columns:
+            df[col] = None
+    
+    if results:
+        df_export = pd.DataFrame()
+        
+
+        # Assign values to selected columns, set other columns to None
+        for column in selected_columns:
+            df_export[column] = [result.get(column, None) for result in results]
+        
+        # Ensure all other columns are set to None
+        all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
+        
+        other_columns = all_possible_columns - set(selected_columns)
+        for column in other_columns:
+            df_export[column] = None
+
+        try:
+            df_export['import_time'] = import_time
+            df_export['employee_id'] = employee_id
+            df_export['file_name'] = filename
+            df_export['process_tag'] = 'export'
+            df_export.to_sql('tbl_export_records_zoominfo_company_paid', db.get_bind(), if_exists='append', index=False)
+        except Exception as e:
+            print(f"An error occurred while inserting export records: {e}")
+            return JSONResponse(content={"error": str(e)}, status_code=500)
+           
     return {"matches": results}
 
 
