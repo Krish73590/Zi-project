@@ -1,6 +1,6 @@
 import io
 import os
-from fastapi import FastAPI, File, UploadFile, Form, Depends, HTTPException
+from fastapi import FastAPI, File, Query, UploadFile, Form, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import psycopg2
 from sqlalchemy import create_engine, text, inspect
@@ -181,119 +181,6 @@ async def upload_file_user_b(
         return await process_company_upload(
             file, selected_columns, match_company_domain, match_company_name, db
         )
-
-# Common processing logic for file uploads  
-# async def process_upload(
-#     file: UploadFile,
-#     selected_columns: str,
-#     match_domain: bool,
-#     match_linkedin_url: bool,
-#     match_zi_contact_id: bool,
-#     db: Session
-# ):  
-#     filename = file.filename
-#     employee_id = employee_id_store.get('employee_id')  # Access the global variable
-#     if not employee_id:
-#         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
-    
-#     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
-#     # df = df.astype(str)
- 
-#     df = df.where(pd.notnull(df), None)
-
-#     if not all(col in df.columns for col in ['domain', 'first_name', 'last_name','linkedin_url','zi_contact_id']):
-#         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
-
-#     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
-#     if not selected_columns:
-#         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
-
-
-#     all_columns = set(df.columns) | set(selected_columns)
-#     missing_columns = all_columns - set(df.columns)
-#     if missing_columns:
-#         for col in missing_columns:
-#             df[col] = None
-            
-#     results = []
-#     import_time = datetime.now()
-#     for _, row in df.iterrows():
-#         conditions = []
-#         params = {}
-
-#         if match_domain:
-#             conditions.append("\"Website\" = :domain")
-#             params["domain"] = row['domain']
-#             conditions.append("\"First Name\" = :first_name")
-#             params["first_name"] = row['first_name']
-#             conditions.append("\"Last Name\" = :last_name")
-#             params["last_name"] = row['last_name']
-#         if match_linkedin_url:
-#             conditions.append("\"LinkedIn Contact Profile URL\" = :linkedin_url")
-#             params["linkedin_url"] = row['linkedin_url']
-#         if match_zi_contact_id:
-#             try:
-#                 # Check if the value can be converted to an integer
-#                 if isinstance(row['zi_contact_id'], (float, int)):
-#                     row['zi_contact_id'] = str(int(row['zi_contact_id']))
-#                 else:
-#                     row['zi_contact_id'] = str(row['zi_contact_id'])
-#             except (ValueError, TypeError):
-#                 row['zi_contact_id'] = str(row['zi_contact_id'])
-            
-#             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
-#             params["zi_contact_id"] = row['zi_contact_id']
-    
-#             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
-#             params["zi_contact_id"] = row['zi_contact_id']
-            
-            
-#         if not conditions:
-#             conditions.append("0=1")
-
-#         where_clause = " AND ".join(conditions)
-#         select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
-
-#         query = f"""
-#         SELECT {select_columns} FROM tbl_zoominfo_contact_paid
-#         WHERE {where_clause}
-#         """
-        
-#         try:
-#             result = db.execute(text(query).params(params)).fetchall()
-#             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
-#             results.extend([dict(zip(columns, row)) for row in result])
-#         except Exception as e:
-#             print(f"An error occurred: {e}")
-#             return JSONResponse(content={"error": str(e)}, status_code=500)
-        
-#     if results:
-#         df_export = pd.DataFrame()
-        
-
-#         # Assign values to selected columns, set other columns to None
-#         for column in selected_columns:
-#             df_export[column] = [result.get(column, None) for result in results]
-        
-#         # Ensure all other columns are set to None
-#         all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
-#         print(all_possible_columns)
-#         print(set(selected_columns))
-#         other_columns = all_possible_columns - set(selected_columns)
-#         for column in other_columns:
-#             df_export[column] = None
-
-#         try:
-#             print(df_export.columns)
-#             print(df_export.head())
-#             df_export['import_time'] = import_time
-#             df_export['employee_id'] = employee_id
-#             df_export['file_name'] = filename
-#             df_export.to_sql('tbl_export_records_zoominfo_contact_paid', db.get_bind(), if_exists='append', index=False)
-#         except Exception as e:
-#             print(f"An error occurred while inserting export records: {e}")
-#             return JSONResponse(content={"error": str(e)}, status_code=500)
-#     return {"matches": results}
 
 async def process_upload(
     file: UploadFile,
@@ -596,3 +483,79 @@ async def import_data(
     conn.close()
 
     return JSONResponse(content={"message": f"Total records inserted: {total_records_inserted}", "file_messages": file_messages})
+
+
+
+@app.get("/user/download-activity/")
+async def download_activity(
+    employee_id: str,
+    import_time: str,
+    table_type: TableType = Query(...),
+    db: Session = Depends(get_db)
+):
+    results = []
+    try:
+        # Determine the table name based on table_type
+        if table_type == TableType.contact:
+            table_name = 'tbl_export_records_zoominfo_contact_paid'
+        elif table_type == TableType.company:
+            table_name = 'tbl_export_records_zoominfo_company_paid'
+
+        if table_type == TableType.contact:
+            cols = """ "tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" """
+        elif table_type == TableType.company:
+            cols = """ "tbl_zoominfo_company_paid_id","ZoomInfo Company ID","Company Name","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Employees","Employee Range","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Defunct Company","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Company Is Acquired","Company ID (Ultimate Parent)","Entity Name (Ultimate Parent)","Company ID (Immediate Parent)","Entity Name (Immediate Parent)","Relationship (Immediate Parent)","Query Name","Company Description","db_file_name","created_date","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","Company HQ Phone_Country","AFS Score Name","AFS Score","AFS Bucket" """
+            
+        # Prepare the query
+        query = text(f"""
+        SELECT {cols}
+        FROM {table_name}
+        WHERE employee_id = :employee_id AND import_time = :import_time
+        """)
+        print(query)
+        # Execute the query
+        result = db.execute(query, {"employee_id": employee_id, "import_time": import_time}).fetchall()
+        columns = [desc[0] for desc in db.execute(query, {"employee_id": employee_id, "import_time": import_time}).cursor.description]
+        results.extend([dict(zip(columns, row)) for row in result])
+
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+    return JSONResponse(content={"results": results})
+    
+    
+
+@app.get("/user/last-activities/")
+async def get_last_activities(db: Session = Depends(get_db),table_type: TableType = Query(...)):
+    employee_id = employee_id_store.get('employee_id')
+    if not employee_id:
+        raise HTTPException(status_code=400, detail="Employee ID not found.")
+    results = []
+    try:
+        # Determine the table name based on table_type
+        if table_type == TableType.contact:
+            table_name = 'tbl_export_records_zoominfo_contact_paid'
+        elif table_type == TableType.company:
+            table_name = 'tbl_export_records_zoominfo_company_paid'
+        
+        
+        query = text(f"""
+        SELECT DISTINCT employee_id, import_time, file_name, process_tag FROM {table_name}
+        WHERE employee_id = :employee_id ORDER BY import_time DESC
+        """) 
+        
+        result = db.execute(query, {"employee_id": employee_id}).fetchall()
+        # result = db.execute(query, {"employee_id": employee_id}).fetchall()
+        columns = [desc[0] for desc in db.execute(query, {"employee_id": employee_id}).cursor.description]
+        results.extend([dict(zip(columns, row)) for row in result])
+        
+        for record in results:
+            record['download_link'] = f"/user/download-activity/?employee_id={employee_id}&import_time={record['import_time']}&table_type={table_type.value}"
+        
+        return results
+
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+

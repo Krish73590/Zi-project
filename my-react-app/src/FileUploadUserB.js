@@ -41,9 +41,11 @@ import {
   Select,
   Wrap,
   WrapItem,
+  Heading,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { saveAs } from 'file-saver';
+import * as XLSX from 'xlsx';
 
 const FileUpload = () => {
   const [file, setFile] = useState(null);
@@ -71,8 +73,23 @@ const FileUpload = () => {
   // State for Import functionality
   const [importFile, setImportFile] = useState(null);
   const [tableType, setTableType] = useState('Company');
+  const [logtableType, setlogTableType] = useState('Company');
   const [importMessages, setImportMessages] = useState([]);
 
+  const [activities, setActivities] = useState([]);
+
+  useEffect(() => {
+    console.log(`Fetching data for tableType: ${logtableType}`);
+    axios.get(`http://localhost:8000/user/last-activities/?table_type=${logtableType}`)
+      .then(response => {
+        console.log('Data fetched:', response.data);
+        setActivities(response.data);
+      })
+      .catch(error => {
+        console.error('Error fetching activities:', error);
+      });
+  }, [logtableType]);
+  
   useEffect(() => {
     const fetchColumns = async () => {
       try {
@@ -102,30 +119,37 @@ const FileUpload = () => {
     fetchColumns();
   }, [toast, tableType]);
 
-  // useEffect(() => {
-  //   if (selectAll) {
-  //     setSelectedColumns(columns);
-  //   }
-  // }, [selectAll, columns]);
 
-  // useEffect(() => {
-  //   if (unselectAll) {
-  //     setSelectedColumns([]);
-  //   }
-  // }, [unselectAll]);
 
-  // useEffect(() => {
-  //   if (selectedColumns.length === columns.length) {
-  //     setSelectAll(false);
-  //     setUnselectAll(false);
-  //   } else if (selectedColumns.length === 0) {
-  //     setSelectAll(false);
-  //     setUnselectAll(true);
-  //   } else {
-  //     setSelectAll(false);
-  //     setUnselectAll(false);
-  //   }
-  // }, [selectedColumns, columns]);
+  const handlelogExport = async (activity) => {
+    try {
+      const response = await axios.get(`http://127.0.0.1:8000/user/download-activity/`, {
+        params: {
+          employee_id: activity.employee_id,
+          import_time: activity.import_time,
+          table_type: logtableType // Adjust as needed
+        }
+      });
+
+      // Convert response data to XLSX
+      const data = response.data.results; // Data from API
+
+      // Create a workbook and add a worksheet
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+      // Create a blob and save it
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      saveAs(blob, `activity_${activity.import_time}.xlsx`);
+
+    } catch (error) {
+      console.error('Error downloading the data:', error);
+    }
+  };
+
+
 
   useEffect(() => {
     if (tableType === 'Company') {
@@ -273,6 +297,7 @@ const FileUpload = () => {
     saveAs(blob, 'results.csv');
   };
 
+  
   const handleRemoveColumn = (columnToRemove) => {
     setSelectedColumns(prevColumns =>
       prevColumns.filter(col => col !== columnToRemove)
@@ -694,6 +719,43 @@ const FileUpload = () => {
             </ModalFooter>
           </ModalContent>
         </Modal>
+        <Box p={5}>
+      <FormControl mb={5}>
+        <FormLabel fontWeight="bold">Select Table Type</FormLabel>
+        <Select value={logtableType} onChange={(e) => setlogTableType(e.target.value)}>
+          <option value="Company">Company</option>
+          <option value="Contact">Contact</option>
+        </Select>
+      </FormControl>
+
+      <Heading mb={4}>Last Activities</Heading>
+      <Table variant="striped" colorScheme="teal">
+        <Thead>
+          <Tr>
+            <Th>Employee ID</Th>
+            <Th>Import Time</Th>
+            <Th>File Name</Th>
+            <Th>Process Tag</Th>
+            <Th>Download</Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {activities.map(activity => (
+            <Tr key={activity.import_time}>
+              <Td>{activity.employee_id}</Td>
+              <Td>{activity.import_time}</Td>
+              <Td>{activity.file_name}</Td>
+              <Td>{activity.process_tag}</Td>
+              <Td>
+                <Button colorScheme="teal" onClick={() => handlelogExport(activity)}>
+                  Download
+                </Button>
+              </Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
+    </Box>
       </VStack>
     );
   };
