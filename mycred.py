@@ -1,5 +1,5 @@
-dbname="postgres"
-user="postgres"
+dbname="test"
+user="ia_dhananjay"
 password="Password123*"
 host="localhost"
 port="5432"

@@ -45,7 +45,9 @@ import {
   CheckboxGroup
 } from '@chakra-ui/react';
 import axios from 'axios';
-import { saveAs } from 'file-saver';
+import { saveAs } from 'file-saver'; 
+import DownloadSampleHeadersButton from './DownloadSampleHeadersButton';
+
 
 const FileUploadUserA = () => {
   // State for Export functionality
@@ -278,8 +280,9 @@ const FileUploadUserA = () => {
       <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
         {/* Import Section */}
         <Box flex={1} p={4} borderWidth={1} borderRadius="lg">
-          <Text fontSize="2xl" mb={4} fontWeight="bold">Import Data</Text>
+          <Text fontSize="2xl" mb={4} fontWeight="bold">Import Data</Text> 
           <Stack spacing={4}>
+            <DownloadSampleHeadersButton />
             <FormControl>
               <FormLabel fontWeight="bold">Upload Excel/CSV File</FormLabel>
               <Input type="file" accept=".xlsx,.csv" onChange={handleImportFileChange} />
@@ -307,10 +310,10 @@ const FileUploadUserA = () => {
 
         <Divider orientation={{ base: 'horizontal', md: 'vertical' }} />
 
-        {/* Export Section */}
         <Box flex={1} p={4} borderWidth={1} borderRadius="lg">
           <Text fontSize="2xl" mb={4} fontWeight="bold">Export Data</Text>
           <Stack spacing={4}>
+            <DownloadSampleHeadersButton />
             <FormControl>
               <FormLabel fontWeight="bold">Upload Excel File</FormLabel>
               <Input type="file" accept=".xlsx" onChange={handleFileChange} />
