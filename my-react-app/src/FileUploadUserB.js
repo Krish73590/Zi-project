@@ -42,10 +42,15 @@ import {
   Wrap,
   WrapItem,
   Heading,
+  TabList,
+  Tab,
+  Tabs,
+  Switch,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { saveAs } from 'file-saver';
 import * as XLSX from 'xlsx';
+import { ImDownload3 } from "react-icons/im";
 
 const FileUpload = () => {
   const [file, setFile] = useState(null);
@@ -72,11 +77,42 @@ const FileUpload = () => {
 
   // State for Import functionality
   const [importFile, setImportFile] = useState(null);
-  const [tableType, setTableType] = useState('Company');
+  const [ImporttableType, setImportTableType] = useState('Company');
+  const [ExporttableType, setExportTableType] = useState('Company');
   const [logtableType, setlogTableType] = useState('Company');
   const [importMessages, setImportMessages] = useState([]);
 
   const [activities, setActivities] = useState([]);
+  const [isChecked, setIsChecked] = useState(false);
+
+  const contactHeaders  = [
+    "ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations"
+   ]; 
+   
+   const companyHeaders = [
+     "ZoomInfo Company ID","Company Name","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Employees","Employee Range","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Defunct Company","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Company Is Acquired","Company ID (Ultimate Parent)","Entity Name (Ultimate Parent)","Company ID (Immediate Parent)","Entity Name (Immediate Parent)","Relationship (Immediate Parent)"
+   ];
+
+    
+  
+    const handleDownload = () => {
+      const headers = ImporttableType === 'Contact' ? contactHeaders : companyHeaders;
+      const csvRows = [];
+      const headersRow = headers.join(',');
+      csvRows.push(headersRow);
+  
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv' });
+      saveAs(blob, `${ImporttableType}_sample_headers.csv`);
+  
+      toast({
+        title: 'Download Started',
+        description: 'Sample headers CSV file is being downloaded.',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+    };
 
   useEffect(() => {
     console.log(`Fetching data for tableType: ${logtableType}`);
@@ -93,13 +129,13 @@ const FileUpload = () => {
   useEffect(() => {
     const fetchColumns = async () => {
       try {
-        const endpoint = tableType === 'Company' ? '/company-columns/' : '/contact-columns/';
+        const endpoint = ExporttableType === 'Company' ? '/company-columns/' : '/contact-columns/';
         const response = await axios.get(`http://localhost:8000${endpoint}`);
         // Ensure unique columns
         const uniqueColumns = [...new Set(response.data.columns)];
-        if (tableType === 'Company') {
+        if (ExporttableType === 'Company') {
           setCompanyColumns(uniqueColumns);
-          console.log("Current tableType:", tableType);
+          console.log("Current tableType:", ExporttableType);
           console.log("dfsfsd", uniqueColumns);
         } else {
           setContactColumns(uniqueColumns);
@@ -117,7 +153,7 @@ const FileUpload = () => {
     };
 
     fetchColumns();
-  }, [toast, tableType]);
+  }, [toast, ExporttableType]);
 
 
 
@@ -142,41 +178,56 @@ const FileUpload = () => {
 
       // Create a blob and save it
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `activity_${activity.import_time}.xlsx`);
+      saveAs(blob, `${activity.file_name.replace('.xlsx', '').replace('.csv', '')}_${activity.import_time}.xlsx`);
 
     } catch (error) {
       console.error('Error downloading the data:', error);
     }
   };
 
+  const handleTabChange = (index) => {
+    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
+    setlogTableType(tabValues[index]);
+  };
+
+  const handleExportTabChange = (index) => {
+    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
+    setExportTableType(tabValues[index]);
+  };
+
+  const handleImportTabChange = (index) => {
+    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
+    setImportTableType(tabValues[index]);
+  };
+
 
 
   useEffect(() => {
-    if (tableType === 'Company') {
+    if (ExporttableType === 'Company') {
       setSelectedColumns([]);
     }
-  }, [ tableType]);
+  }, [ ExporttableType]);
 
   useEffect(() => {
-    if (tableType === 'Contact') {
+    if (ExporttableType === 'Contact') {
       setSelectedColumns([]);
     }
-  }, [ tableType]);
+  }, [ ExporttableType]);
 
   useEffect(() => {
-    if (selectAll && tableType === 'Contact') {
+    if (selectAll && ExporttableType === 'Contact') {
       setSelectedColumns(Contactcolumns);
     }
-  }, [selectAll, Contactcolumns, tableType]);
+  }, [selectAll, Contactcolumns, ExporttableType]);
   
   useEffect(() => {
-    if (unselectAll && tableType === 'Contact') {
+    if (unselectAll && ExporttableType === 'Contact') {
       setSelectedColumns([]);
     }
-  }, [unselectAll, tableType]);
+  }, [unselectAll, ExporttableType]);
 
   useEffect(() => {
-    if (tableType === 'Contact') {
+    if (ExporttableType === 'Contact') {
       if (selectedColumns.length === Contactcolumns.length) {
         setSelectAll(false);
         setUnselectAll(false);
@@ -188,22 +239,22 @@ const FileUpload = () => {
         setUnselectAll(false);
       }
     }
-  }, [selectedColumns, Contactcolumns, tableType]);
+  }, [selectedColumns, Contactcolumns, ExporttableType]);
   
   useEffect(() => {
-    if (selectAll && tableType === 'Company') {
+    if (selectAll && ExporttableType === 'Company') {
       setSelectedColumns(Companycolumns);
     }
-  }, [selectAll, Companycolumns, tableType]);
+  }, [selectAll, Companycolumns, ExporttableType]);
   
   useEffect(() => {
-    if (unselectAll && tableType === 'Company') {
+    if (unselectAll && ExporttableType === 'Company') {
       setSelectedColumns([]);
     }
-  }, [unselectAll, tableType]);
+  }, [unselectAll, ExporttableType]);
   
   useEffect(() => {
-    if (tableType === 'Company') {
+    if (ExporttableType === 'Company') {
       if (selectedColumns.length === Companycolumns.length) {
         setSelectAll(false);
         setUnselectAll(false);
@@ -215,12 +266,17 @@ const FileUpload = () => {
         setUnselectAll(false);
       }
     }
-  }, [selectedColumns, Companycolumns, tableType]);
+  }, [selectedColumns, Companycolumns, ExporttableType]);
 
   
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
   };
+
+
+  
+    // Handle the switch toggle
+  const handleToggle = () => setIsChecked(!isChecked);
 
   const handleExportSubmit = async () => {
     if (!file) {
@@ -236,8 +292,8 @@ const FileUpload = () => {
 
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('table_type', tableType);
-    if (tableType === 'Company') {
+    formData.append('table_type', ExporttableType);
+    if (ExporttableType === 'Company') {
       formData.append('selected_columns', selectedColumns.join(','));
     } else {
       formData.append('selected_columns', selectedColumns.join(','));
@@ -320,7 +376,7 @@ const FileUpload = () => {
   
       const formData = new FormData();
       formData.append('files', importFile);
-      formData.append('table_type', tableType);
+      formData.append('table_type', ImporttableType);
   
       setimportLoading(true);
       try {
@@ -332,7 +388,7 @@ const FileUpload = () => {
         setImportMessages(response.data.file_messages);
         toast({
           title: 'Success',
-          description: 'Data imported successfully.',
+          description: response.data.message,
           status: 'success',
           duration: 5000,
           isClosable: true,
@@ -357,28 +413,22 @@ const FileUpload = () => {
           <Box flex={1} p={4} borderWidth={1} borderRadius="lg">
             <Text fontSize="2xl" mb={4} fontWeight="bold">Import Data</Text>
             <Stack spacing={4}>
+            <Tabs onChange={handleImportTabChange} defaultIndex={0}>
+                  <TabList>
+                    <Tab>Company</Tab>
+                    <Tab>Contact</Tab>
+                  </TabList>
+            </Tabs>
+            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleDownload}>
+              Download {ImporttableType} Headers
+            </Button>
               <FormControl>
                 <FormLabel fontWeight="bold">Upload Excel/CSV File</FormLabel>
                 <Input type="file" accept=".xlsx,.csv" onChange={handleImportFileChange} />
               </FormControl>
-              <FormControl>
-                <FormLabel fontWeight="bold">Select Table Type</FormLabel>
-                <Select value={tableType} onChange={(e) => setTableType(e.target.value)}>
-                  <option value="Company">Company</option>
-                  <option value="Contact">Contact</option>
-                </Select>
-              </FormControl>
-              <Button colorScheme="teal" onClick={handleImportSubmit} isDisabled={importloading}>
-                {importloading ? <Spinner size="sm" /> : 'Import Data'}
+              <Button colorScheme="blue" onClick={handleImportSubmit} isDisabled={importloading}>
+              {importloading ? <Spinner size="sm" /> : `Import ${ImporttableType} Data`}
               </Button>
-              {importMessages.length > 0 && (
-                <Box mt={4}>
-                  <Text fontWeight="bold">Import Messages:</Text>
-                  {importMessages.map((msg, index) => (
-                    <Text key={index}>{msg}</Text>
-                  ))}
-                </Box>
-              )}
             </Stack>
           </Box>
   
@@ -388,33 +438,34 @@ const FileUpload = () => {
           <Box flex={1} p={4} borderWidth={1} borderRadius="lg">
             <Text fontSize="2xl" mb={4} fontWeight="bold">Export Data</Text>
             <Stack spacing={4}>
+            <Tabs onChange={handleExportTabChange} defaultIndex={0}>
+                  <TabList>
+                    <Tab>Company</Tab>
+                    <Tab>Contact</Tab>
+                  </TabList>
+            </Tabs>
+            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleDownload}>
+              Download {ExporttableType} Headers
+            </Button>
               <FormControl>
                 <FormLabel fontWeight="bold">Upload Excel File</FormLabel>
                 <Input type="file" accept=".xlsx" onChange={handleFileChange} />
               </FormControl>
-              <FormControl>
-                <FormLabel fontWeight="bold">Select Table Type</FormLabel>
-                <Select value={tableType} onChange={(e) => setTableType(e.target.value)}>
-                  <option value="Company">Company</option>
-                  <option value="Contact">Contact</option>
-                </Select>
-              </FormControl>
   
               {/* Column Selection */}
               {/* Conditional Rendering Based on Table Type */}
-              {tableType === 'Company' ? (
+              {ExporttableType === 'Company' ? (
                 <>
                   <FormControl>
-                    <FormLabel fontWeight="bold">Select Columns</FormLabel>
                     <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
                       <PopoverTrigger>
-                        <Button colorScheme="teal" width="full">Select Columns</Button>
+                        <Button colorScheme="blue" width="full">Select {ExporttableType} Columns</Button>
                       </PopoverTrigger>
                       <PopoverContent>
                         <PopoverArrow />
                         <PopoverBody>
                           <CheckboxGroup
-                            colorScheme="teal"
+                            colorScheme="blue"
                             value={selectedColumns}
                             onChange={(values) => {
                               if (values.includes('selectAll')) {
@@ -487,7 +538,7 @@ const FileUpload = () => {
                       </PopoverContent>
                     </Popover>
                   </FormControl>
-                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md">
+                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md"  >
                     <Text fontWeight="bold">Currently Selected Columns:</Text>
                     <Wrap spacing={2} mt={2}>
                       {Array.from(new Set(selectedColumns)).length > 0 ? (
@@ -524,16 +575,15 @@ const FileUpload = () => {
               ) : (
                 <>
                 <FormControl>
-                  <FormLabel fontWeight="bold">Select Columns</FormLabel>
                   <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
                     <PopoverTrigger>
-                      <Button colorScheme="teal" width="full">Select Columns</Button>
+                      <Button colorScheme="blue" width="full">Select {ExporttableType} Columns</Button>
                     </PopoverTrigger>
                     <PopoverContent>
                       <PopoverArrow />
                       <PopoverBody>
                         <CheckboxGroup
-                          colorScheme="teal"
+                          colorScheme="blue"
                           value={selectedColumns}
                           onChange={(values) => {
                             if (values.includes('selectAll')) {
@@ -606,7 +656,7 @@ const FileUpload = () => {
                     </PopoverContent>
                   </Popover>
                 </FormControl>
-                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md">
+                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md" maxHeight="10rem" overflowY="auto">
                     <Text fontWeight="bold">Currently Selected Columns:</Text>
                     <Wrap spacing={2} mt={2}>
                       {Array.from(new Set(selectedColumns)).length > 0 ? (
@@ -647,8 +697,8 @@ const FileUpload = () => {
                   </FormControl>
                 </>
               )}
-              <Button colorScheme="teal" onClick={handleExportSubmit} isDisabled={exportloading}>
-              {exportloading ? <Spinner size="sm" /> : 'Export Data'}
+              <Button colorScheme="blue" onClick={handleExportSubmit} isDisabled={exportloading}>
+              {exportloading ? <Spinner size="sm" /> : `Export ${ExporttableType} Data`}
             </Button>
             </Stack>
           </Box>
@@ -713,29 +763,43 @@ const FileUpload = () => {
               )}
             </ModalBody>
             <ModalFooter>
-              <Button colorScheme="teal" onClick={onClose}>
+              <Button colorScheme="blue" onClick={onClose}>
                 Close
               </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>
-        <Box p={5}>
-      <FormControl mb={5}>
-        <FormLabel fontWeight="bold">Select Table Type</FormLabel>
-        <Select value={logtableType} onChange={(e) => setlogTableType(e.target.value)}>
-          <option value="Company">Company</option>
-          <option value="Contact">Contact</option>
-        </Select>
-      </FormControl>
-
-      <Heading mb={4}>Last Activities</Heading>
-      <Table variant="striped" colorScheme="teal">
-        <Thead>
-          <Tr>
+        <Box p={5} pl={10}>
+        {/* <Heading mb={4}>Last Activities</Heading> */}
+        <Text fontSize="2xl" mb={4} fontWeight="bold">Last Activities</Text>
+      <Tabs onChange={handleTabChange} defaultIndex={0}>
+      <TabList>
+        <Tab>Company</Tab>
+        <Tab>Contact</Tab>
+      </TabList>
+    </Tabs>
+    <Box
+      maxHeight="500px"
+      maxWidth="1400px"
+      overflowY="auto"
+      overflowX="auto"
+      mt={7}
+      border="2px solid"
+      borderColor="gray.300"
+      rounded="lg"
+    >
+      <Table
+        variant="striped"
+        colorScheme="gray"
+        minWidth="1000px"
+      >
+        <Thead position="sticky" top="0" bg="gray.100" zIndex="1">
+        <Tr>
             <Th>Employee ID</Th>
             <Th>Import Time</Th>
             <Th>File Name</Th>
             <Th>Process Tag</Th>
+            <Th>Counts</Th>
             <Th>Download</Th>
           </Tr>
         </Thead>
@@ -746,8 +810,9 @@ const FileUpload = () => {
               <Td>{activity.import_time}</Td>
               <Td>{activity.file_name}</Td>
               <Td>{activity.process_tag}</Td>
+              <Td>{activity.cnt}</Td>
               <Td>
-                <Button colorScheme="teal" onClick={() => handlelogExport(activity)}>
+                <Button colorScheme="blue" onClick={() => handlelogExport(activity)}>
                   Download
                 </Button>
               </Td>
@@ -755,6 +820,7 @@ const FileUpload = () => {
           ))}
         </Tbody>
       </Table>
+    </Box>
     </Box>
       </VStack>
     );
