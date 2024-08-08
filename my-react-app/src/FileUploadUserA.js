@@ -16,7 +16,6 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
-  ModalFooter,
   Spinner,
   useDisclosure,
   Table,
@@ -25,7 +24,6 @@ import {
   Tr,
   Th,
   Td,
-  TableCaption,
   TableContainer,
   Tag,
   TagLabel,
@@ -34,7 +32,6 @@ import {
   RadioGroup,
   Radio,
   Divider,
-  Select,
   Wrap,
   WrapItem,
   Popover,
@@ -43,11 +40,10 @@ import {
   PopoverBody,
   PopoverArrow,
   CheckboxGroup,
-  Heading,
   TabList,
   Tab,
   Tabs,
-  Switch,
+  Flex,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { saveAs } from 'file-saver'; 
@@ -73,7 +69,6 @@ const FileUploadUserA = () => {
   const [exportloading, setexportLoading] = useState(false);
   // State for Import functionality
   const [importFile, setImportFile] = useState(null);
-  const [importMessages, setImportMessages] = useState([]);
 
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [selectedColumns, setSelectedColumns] = useState([]);
@@ -87,35 +82,73 @@ const FileUploadUserA = () => {
   const [logtableType, setlogTableType] = useState('Company');
 
   const [activities, setActivities] = useState([]);
-  const [isChecked, setIsChecked] = useState(false);
-  const [headerType, setHeaderType] = useState('Contact');
 
 
-  const contactHeaders  = [
+  const contactImportHeaders  = [
     "ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations"
    ]; 
    
-   const companyHeaders = [
+   const companyImportHeaders = [
      "ZoomInfo Company ID","Company Name","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Employees","Employee Range","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Defunct Company","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Company Is Acquired","Company ID (Ultimate Parent)","Entity Name (Ultimate Parent)","Company ID (Immediate Parent)","Entity Name (Immediate Parent)","Relationship (Immediate Parent)"
    ];
 
-    
-  
-    const handleDownload = () => {
-      const headers = ImporttableType === 'Contact' ? contactHeaders : companyHeaders;
+   const contactExportHeaders  = [
+    "domain",	"first_name",	"last_name",	"linkedin_url",	"zi_contact_id"
+  ]; 
+   
+   const companyExportHeaders = [
+     "domain","company_name"
+     ];
+     
+    const handleImportDownload = () => {
+      let headers;
+      if (ImporttableType === 'Contact') {
+        headers = contactImportHeaders;
+      } else if (ImporttableType === 'Company') {
+        headers = companyImportHeaders;
+      } 
+
+      // const headers = ImporttableType === 'Contact' ? contactHeaders : companyHeaders;
       const csvRows = [];
       const headersRow = headers.join(',');
       csvRows.push(headersRow);
   
       const csvString = csvRows.join('\n');
       const blob = new Blob([csvString], { type: 'text/csv' });
-      saveAs(blob, `${ImporttableType}_sample_headers.csv`);
-  
+      saveAs(blob, `${ImporttableType}_import_sample_headers.csv`);
+      
       toast({
         title: 'Download Started',
         description: 'Sample headers CSV file is being downloaded.',
         status: 'info',
-        duration: 3000,
+        duration: 2000,
+        isClosable: true,
+      });
+    };
+
+    const handleExportDownload = () => {
+      let headers;
+      
+      if (ExporttableType === 'Contact') {
+        headers = contactExportHeaders;
+      } else if (ExporttableType === 'Company') {
+        headers = companyExportHeaders;
+      }
+
+      // const headers = ImporttableType === 'Contact' ? contactHeaders : companyHeaders;
+      const csvRows = [];
+      const headersRow = headers.join(',');
+      csvRows.push(headersRow);
+  
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv' });
+      saveAs(blob, `${ExporttableType}_export_sample_headers.csv`);
+      
+      toast({
+        title: 'Download Started',
+        description: 'Sample headers CSV file is being downloaded.',
+        status: 'info',
+        duration: 2000,
         isClosable: true,
       });
     };
@@ -346,7 +379,6 @@ const FileUploadUserA = () => {
           'Content-Type': 'multipart/form-data',
         },
       });
-      setImportMessages(response.data.file_messages);
       toast({
         title: 'Success',
         description: response.data.message,
@@ -372,7 +404,21 @@ const FileUploadUserA = () => {
     setSelectedColumns(selectedColumns.filter(column => column !== col));
   };
 
-  return (
+  return (<>
+    <Flex
+  position="fixed"
+  top={0}
+  width="100%"
+  alignItems="center"
+  justifyContent="center"
+  bg="gray.200"
+  zIndex="1000" // Ensures it stays on top of other content
+>
+  <Text fontSize="4xl" fontWeight="bold" textAlign="center">
+    ZoomInfo Data Platform
+  </Text>
+  </Flex>
+  <Box mt="80px"> 
     <VStack spacing={6} p={4} align="stretch">
       <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
         {/* Import Section */}
@@ -385,7 +431,7 @@ const FileUploadUserA = () => {
                     <Tab>Contact</Tab>
                   </TabList>
             </Tabs>
-            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleDownload}>
+            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleImportDownload}>
               Download {ImporttableType} Headers
             </Button>
             
@@ -410,7 +456,7 @@ const FileUploadUserA = () => {
                     <Tab>Contact</Tab>
                   </TabList>
             </Tabs>
-            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleDownload}>
+            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleExportDownload}>
               Download {ExporttableType} Headers
             </Button>
             {/* <DownloadSampleHeadersButton /> */}
@@ -604,13 +650,12 @@ const FileUploadUserA = () => {
           <ModalContent>
             <ModalHeader>Matching Results</ModalHeader>
             <ModalCloseButton />
-            <ModalBody>
+            <ModalBody maxHeight="65vh" overflowY="auto">
               {results.length > 0 ? (
                 <VStack spacing={4} align="stretch">
                   {/* Table for Displaying Results */}
                   <TableContainer>
                     <Table variant="simple">
-                      <TableCaption>Showing {displayedResults.length} of {results.length} records</TableCaption>
                       <Thead>
                         <Tr>
                           {Object.keys(results[0] || {}).map((key) => (
@@ -632,14 +677,16 @@ const FileUploadUserA = () => {
   
                   {/* Pagination Controls */}
                   <Stack spacing={4} direction="row" justify="center">
-                    <Button
+                  <Button
+                      size = "sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       isDisabled={currentPage === 1}
                     >
                       Previous
                     </Button>
-                    <Text>Page {currentPage} of {totalPages}</Text>
+                    <Text fontSize="sm" alignSelf="center">Page {currentPage} of {totalPages}</Text>
                     <Button
+                      size = "sm"
                       onClick={() => handlePageChange(currentPage + 1)}
                       isDisabled={currentPage === totalPages}
                     >
@@ -656,11 +703,6 @@ const FileUploadUserA = () => {
                 <Text>No results to display.</Text>
               )}
             </ModalBody>
-            <ModalFooter>
-              <Button colorScheme="blue" onClick={onClose}>
-                Close
-              </Button>
-            </ModalFooter>
           </ModalContent>
         </Modal>
         <Box p={5} pl={10}>
@@ -716,7 +758,7 @@ const FileUploadUserA = () => {
       </Table>
     </Box>
     </Box>
-      </VStack>
+      </VStack> </Box></>
   );
 };
 
