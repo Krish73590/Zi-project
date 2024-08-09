@@ -451,230 +451,357 @@ const FileUpload = () => {
     50% { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   `;
+    
 
-
-    return (
-      <>
-    <Flex
-  position="fixed"
-  top={0}
-  width="100%"
-  alignItems="center"
-  justifyContent="center"
-  bg="gray.200"
+      return (
+        <>
+      <Flex
+      position="fixed"
+      top={0}
+      width="100%"
+      alignItems="center"
+      justifyContent="center"
+      bg="gray.200"
   zIndex="1000" // Ensures it stays on top of other content
->
-  <Text fontSize="4xl" fontWeight="bold" textAlign="center">
-    ZoomInfo Data Platform
-  </Text>
-  </Flex>
+  >
+    <Text fontSize="4xl" fontWeight="bold" textAlign="center">
+      ZoomInfo Data Platform
+    </Text>
+    </Flex>
   <Box mt="80px"> 
-      <VStack spacing={6} p={4} align="stretch">
-        <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
-        <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg} >
-            <Text
-              fontSize="4xl"
-              fontWeight="bold"
-              bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
-              bgClip="text"
-              animation={`${gradient} 4s ease infinite`}
-              backgroundSize="200% 200%"
-              mb={8}
+        <VStack spacing={6} p={4} align="stretch">
+          <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
+          <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg} >
+              <Text
+                fontSize="4xl"
+                fontWeight="bold"
+                bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
+                bgClip="text"
+                animation={`${gradient} 4s ease infinite`}
+                backgroundSize="200% 200%"
+                mb={8}
+              >
+                Import Data
+              </Text>
+              <Stack spacing={5}>
+                <Tabs
+                onChange={handleImportTabChange}
+                defaultIndex={0}
+                colorScheme="teal"
+                variant="enclosed"
+                >
+                    <TabList>
+                <Tab
+                  _selected={{
+                    bgGradient: gradientBg,
+                    color: "white",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Company
+                </Tab>
+                <Tab
+                  _selected={{
+                    bgGradient: gradientBg,
+                    color: "white",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Contact
+                </Tab>
+              </TabList>
+            </Tabs>
+            <Button
+              onClick={handleImportDownload}
+              size="md" // Use "md" for a more standard size
+              bgGradient={gradientBg}
+              color="white"
+              _hover={{ bgGradient: hoverBg }}
+              _active={{ bgGradient: hoverBg }}
+              borderRadius="full"
+              boxShadow="md"
+              rightIcon={<Icon as={ImDownload3} boxSize={5} />}
+              px={6} // Set horizontal padding
+              py={3} // Set vertical padding
+              maxW="fit-content" // Constrain button width to its content
             >
-              Import Data
-            </Text>
-            <Stack spacing={5}>
+              Download {ImporttableType} Headers
+            </Button>
+            <FormControl>
+              <FormLabel
+                fontWeight="bold"
+                fontSize="lg"
+                color="teal.600"
+                mb={3} // Add some space below the label
+              >
+                Upload Excel/CSV File
+              </FormLabel>
+              <Box
+                borderWidth={1}
+                borderRadius="lg"
+                borderColor="teal.300"
+                padding={3}
+                bg="gray.50"
+                _hover={{ bg: "gray.100" }} // Slight color change on hover
+              >
+                <Input
+                  type="file"
+                  accept=".xlsx,.csv"
+                  onChange={handleImportFileChange}
+                  padding={2}
+                  border="none"
+                  _focusVisible={{ outline: "none" }} // Remove default focus outline
+                />
+              </Box>
+            </FormControl>
+            <Button
+              onClick={handleImportSubmit}
+              size="md" // Use "md" for a more standard size
+              bgGradient={gradientBg}
+              isDisabled={importloading}
+              rightIcon={importloading && <Spinner size="sm" />}
+              color="white"
+              _hover={{ bgGradient: hoverBg }}
+              _active={{ bgGradient: hoverBg }}
+              borderRadius="full"
+              boxShadow="md"
+              px={6} // Set horizontal padding
+              py={3} // Set vertical padding
+              maxW="300" // Constrain button width to its content
+            >
+              {importloading ? "Importing..." : `Import ${ImporttableType} Data`}
+            </Button>
+              </Stack>
+            </Box>
+    
+            <Divider orientation={{ base: 'horizontal', md: 'vertical' }} />
+    
+            {/* File Upload Section */}
+            <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg} >
+            <Text
+                fontSize="4xl"
+                fontWeight="bold"
+                bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
+                bgClip="text"
+                animation={`${gradient} 4s ease infinite`}
+                backgroundSize="200% 200%"
+                mb={8}
+              >
+                Export Data
+              </Text>
+              <Stack spacing={5}>
               <Tabs
-              onChange={handleImportTabChange}
+              onChange={handleExportTabChange}
               defaultIndex={0}
               colorScheme="teal"
               variant="enclosed"
               >
-                  <TabList>
-              <Tab
-                _selected={{
-                  bgGradient: gradientBg,
-                  color: "white",
-                  fontWeight: "bold",
-                }}
+              <TabList>
+                <Tab
+                  _selected={{
+                    bgGradient: gradientBg,
+                    color: "white",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Company
+                </Tab>
+                <Tab
+                  _selected={{
+                    bgGradient: gradientBg,
+                    color: "white",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Contact
+                </Tab>
+              </TabList>
+            </Tabs>
+              <Button onClick={handleExportDownload}
+              size="md" // Use "md" for a more standard size
+              bgGradient={gradientBg}
+              color="white"
+              _hover={{ bgGradient: hoverBg }}
+              _active={{ bgGradient: hoverBg }}
+              borderRadius="full"
+              boxShadow="md"
+              rightIcon={<Icon as={ImDownload3} boxSize={5} />}
+              px={6} // Set horizontal padding
+              py={3} // Set vertical padding
+              maxW="fit-content">
+                Download {ExporttableType} Headers
+              </Button>
+              <FormControl>
+              <FormLabel
+                fontWeight="bold"
+                fontSize="lg"
+                color="teal.600"
+                mb={3} // Add some space below the label
               >
-                Company
-              </Tab>
-              <Tab
-                _selected={{
-                  bgGradient: gradientBg,
-                  color: "white",
-                  fontWeight: "bold",
-                }}
+                Upload Excel/CSV File
+              </FormLabel>
+              <Box
+                borderWidth={1}
+                borderRadius="lg"
+                borderColor="teal.300"
+                padding={3}
+                bg="gray.50"
+                _hover={{ bg: "gray.100" }} // Slight color change on hover
               >
-                Contact
-              </Tab>
-            </TabList>
-          </Tabs>
-          <Button
-            onClick={handleImportDownload}
-            size="md" // Use "md" for a more standard size
-            bgGradient={gradientBg}
-            color="white"
-            _hover={{ bgGradient: hoverBg }}
-            _active={{ bgGradient: hoverBg }}
-            borderRadius="full"
-            boxShadow="md"
-            rightIcon={<Icon as={ImDownload3} boxSize={5} />}
-            px={6} // Set horizontal padding
-            py={3} // Set vertical padding
-            maxW="fit-content" // Constrain button width to its content
-          >
-            Download {ImporttableType} Headers
-          </Button>
-          <FormControl>
-            <FormLabel
-              fontWeight="bold"
-              fontSize="lg"
-              color="teal.600"
-              mb={3} // Add some space below the label
-            >
-              Upload Excel/CSV File
-            </FormLabel>
-            <Box
-              borderWidth={1}
-              borderRadius="lg"
-              borderColor="teal.300"
-              padding={3}
-              bg="gray.50"
-              _hover={{ bg: "gray.100" }} // Slight color change on hover
-            >
-              <Input
-                type="file"
-                accept=".xlsx,.csv"
-                onChange={handleImportFileChange}
-                padding={2}
-                border="none"
-                _focusVisible={{ outline: "none" }} // Remove default focus outline
-              />
-            </Box>
-          </FormControl>
-          <Button
-            onClick={handleImportSubmit}
-            size="md" // Use "md" for a more standard size
-            bgGradient={gradientBg}
-            isDisabled={importloading}
-            rightIcon={importloading && <Spinner size="sm" />}
-            color="white"
-            _hover={{ bgGradient: hoverBg }}
-            _active={{ bgGradient: hoverBg }}
-            borderRadius="full"
-            boxShadow="md"
-            px={6} // Set horizontal padding
-            py={3} // Set vertical padding
-            maxW="300" // Constrain button width to its content
-          >
-            {importloading ? "Importing..." : `Import ${ImporttableType} Data`}
-          </Button>
-            </Stack>
-          </Box>
-  
-          <Divider orientation={{ base: 'horizontal', md: 'vertical' }} />
-  
-          {/* File Upload Section */}
-          <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg} >
-          <Text
-              fontSize="4xl"
-              fontWeight="bold"
-              bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
-              bgClip="text"
-              animation={`${gradient} 4s ease infinite`}
-              backgroundSize="200% 200%"
-              mb={8}
-            >
-              Export Data
-            </Text>
-            <Stack spacing={5}>
-            <Tabs
-            onChange={handleExportTabChange}
-            defaultIndex={0}
-            colorScheme="teal"
-            variant="enclosed"
-            >
-            <TabList>
-              <Tab
-                _selected={{
-                  bgGradient: gradientBg,
-                  color: "white",
-                  fontWeight: "bold",
-                }}
-              >
-                Company
-              </Tab>
-              <Tab
-                _selected={{
-                  bgGradient: gradientBg,
-                  color: "white",
-                  fontWeight: "bold",
-                }}
-              >
-                Contact
-              </Tab>
-            </TabList>
-          </Tabs>
-            <Button onClick={handleExportDownload}
-            size="md" // Use "md" for a more standard size
-            bgGradient={gradientBg}
-            color="white"
-            _hover={{ bgGradient: hoverBg }}
-            _active={{ bgGradient: hoverBg }}
-            borderRadius="full"
-            boxShadow="md"
-            rightIcon={<Icon as={ImDownload3} boxSize={5} />}
-            px={6} // Set horizontal padding
-            py={3} // Set vertical padding
-            maxW="fit-content">
-              Download {ExporttableType} Headers
-            </Button>
-            <FormControl>
-            <FormLabel
-              fontWeight="bold"
-              fontSize="lg"
-              color="teal.600"
-              mb={3} // Add some space below the label
-            >
-              Upload Excel/CSV File
-            </FormLabel>
-            <Box
-              borderWidth={1}
-              borderRadius="lg"
-              borderColor="teal.300"
-              padding={3}
-              bg="gray.50"
-              _hover={{ bg: "gray.100" }} // Slight color change on hover
-            >
-              <Input
-                type="file"
-                accept=".xlsx"
-                onChange={handleFileChange}
-                padding={2}
-                border="none"
-                _focusVisible={{ outline: "none" }} // Remove default focus outline
-              />
-            </Box>
-          </FormControl> 
-              {/* Column Selection */}
-              {/* Conditional Rendering Based on Table Type */}
-              {ExporttableType === 'Company' ? (
-                <>
+                <Input
+                  type="file"
+                  accept=".xlsx"
+                  onChange={handleFileChange}
+                  padding={2}
+                  border="none"
+                  _focusVisible={{ outline: "none" }} // Remove default focus outline
+                />
+              </Box>
+            </FormControl> 
+                {/* Column Selection */}
+                {/* Conditional Rendering Based on Table Type */}
+                {ExporttableType === 'Company' ? (
+                  <>
+                    <FormControl>
+                      <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
+                        <PopoverTrigger>
+                          <Button size="md" // Use "md" for a more standard size
+                        bgGradient={gradientBg}
+                        color="white"
+                        _hover={{ bgGradient: hoverBg }}
+                        _active={{ bgGradient: hoverBg }}
+                        borderRadius="full"
+                        boxShadow="md"
+                        px={6} // Set horizontal padding
+                        py={3} // Set vertical padding
+                        maxW="fit-content">Select {ExporttableType} Columns</Button>
+                        </PopoverTrigger>
+                        <PopoverContent>
+                          <PopoverArrow />
+                          <PopoverBody>
+                            <CheckboxGroup
+                              colorScheme="blue"
+                              value={selectedColumns}
+                              onChange={(values) => {
+                                if (values.includes('selectAll')) {
+                                  setSelectAll(true);
+                                  setSelectedColumns(Companycolumns);
+                                } else if (values.includes('unselectAll')) {
+                                  setUnselectAll(true);
+                                  setSelectedColumns([]);
+                                } else {
+                                  setSelectAll(false);
+                                  setUnselectAll(false);
+                                  setSelectedColumns(values);
+                                }
+                              }}
+                            >
+                              <Stack spacing={2}>
+                                <Checkbox
+                                  value="selectAll"
+                                  isChecked={selectAll}
+                                  onChange={(e) => {
+                                    const isChecked = e.target.checked;
+                                    if (isChecked) {
+                                      setSelectAll(true);
+                                      setSelectedColumns(Companycolumns);
+                                    } else {
+                                      setSelectAll(false);
+                                      setSelectedColumns(prev => prev.filter(col => !Companycolumns.includes(col)));
+                                    }
+                                  }}
+                                >
+                                  Select All
+                                </Checkbox>
+                                <Checkbox
+                                  value="unselectAll"
+                                  isChecked={unselectAll}
+                                  onChange={(e) => {
+                                    const isChecked = e.target.checked;
+                                    if (isChecked) {
+                                      setUnselectAll(true);
+                                      setSelectedColumns([]);
+                                    } else {
+                                      setUnselectAll(false);
+                                      setSelectedColumns(prev => prev.filter(col => !Companycolumns.includes(col)));
+                                    }
+                                  }}
+                                >
+                                  Unselect All
+                                </Checkbox>
+                                {Companycolumns.map((column) => (
+                                  <Checkbox
+                                    key={column}
+                                    value={column}
+                                    isChecked={selectedColumns.includes(column)}
+                                    onChange={(e) => {
+                                      const columnName = e.target.value;
+                                      if (e.target.checked) {
+                                        setSelectedColumns(prevSelected => [...prevSelected, columnName]);
+                                        setUnselectAll(false);
+                                      } else {
+                                        setSelectedColumns(prevSelected => prevSelected.filter(col => col !== columnName));
+                                      }
+                                    }}
+                                  >
+                                    {column}
+                                  </Checkbox>
+                                ))}
+                              </Stack>
+                            </CheckboxGroup>
+                          </PopoverBody>
+                        </PopoverContent>
+                      </Popover>
+                    </FormControl>
+                    <Box border="1px" borderColor="gray.200" p={4} borderRadius="md"  maxHeight="10rem" overflowY="auto" >
+                      <Text fontWeight="bold">Currently Selected Columns:</Text>
+                      <Wrap spacing={2} mt={2}>
+                        {Array.from(new Set(selectedColumns)).length > 0 ? (
+                          Array.from(new Set(selectedColumns)).map(col => (
+                            <WrapItem key={col}>
+                              <Tag size='md' borderRadius='full' variant='solid' bg='#36C2CE' color='white' _hover={{ bg: '#478CCF' }}>
+                                <TagLabel>{col}</TagLabel>
+                                <TagCloseButton onClick={() => handleRemoveColumn(col)} />
+                              </Tag>
+                            </WrapItem>
+                          ))
+                        ) : (
+                          <Text>No columns selected</Text>
+                        )}
+                      </Wrap>
+                    </Box>
+                    <FormControl>
+                      <HStack spacing={4}>
+                        <Checkbox
+                          isChecked={matchCompanyDomain}
+                          onChange={() => setMatchCompanyDomain(!matchCompanyDomain)}
+                        >
+                          Match Domain
+                        </Checkbox>
+                        <Checkbox
+                          isChecked={matchCompanyName}
+                          onChange={() => setMatchCompanyName(!matchCompanyName)}
+                        >
+                          Match Company Name
+                        </Checkbox>
+                      </HStack>
+                    </FormControl>
+                  </>
+                ) : (
+                  <>
                   <FormControl>
                     <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
                       <PopoverTrigger>
                         <Button size="md" // Use "md" for a more standard size
-                      bgGradient={gradientBg}
-                      color="white"
-                      _hover={{ bgGradient: hoverBg }}
-                      _active={{ bgGradient: hoverBg }}
-                      borderRadius="full"
-                      boxShadow="md"
-                      px={6} // Set horizontal padding
-                      py={3} // Set vertical padding
-                      maxW="fit-content">Select {ExporttableType} Columns</Button>
+                        bgGradient={gradientBg}
+                        color="white"
+                        _hover={{ bgGradient: hoverBg }}
+                        _active={{ bgGradient: hoverBg }}
+                        borderRadius="full"
+                        boxShadow="md"
+                        px={6} // Set horizontal padding
+                        py={3} // Set vertical padding
+                        maxW="fit-content">Select {ExporttableType} Columns</Button>
                       </PopoverTrigger>
                       <PopoverContent>
                         <PopoverArrow />
@@ -685,7 +812,7 @@ const FileUpload = () => {
                             onChange={(values) => {
                               if (values.includes('selectAll')) {
                                 setSelectAll(true);
-                                setSelectedColumns(Companycolumns);
+                                setSelectedColumns(Contactcolumns);
                               } else if (values.includes('unselectAll')) {
                                 setUnselectAll(true);
                                 setSelectedColumns([]);
@@ -704,10 +831,10 @@ const FileUpload = () => {
                                   const isChecked = e.target.checked;
                                   if (isChecked) {
                                     setSelectAll(true);
-                                    setSelectedColumns(Companycolumns);
+                                    setSelectedColumns(Contactcolumns);
                                   } else {
                                     setSelectAll(false);
-                                    setSelectedColumns(prev => prev.filter(col => !Companycolumns.includes(col)));
+                                    setSelectedColumns(prev => prev.filter(col => !Contactcolumns.includes(col)));
                                   }
                                 }}
                               >
@@ -723,133 +850,6 @@ const FileUpload = () => {
                                     setSelectedColumns([]);
                                   } else {
                                     setUnselectAll(false);
-                                    setSelectedColumns(prev => prev.filter(col => !Companycolumns.includes(col)));
-                                  }
-                                }}
-                              >
-                                Unselect All
-                              </Checkbox>
-                              {Companycolumns.map((column) => (
-                                <Checkbox
-                                  key={column}
-                                  value={column}
-                                  isChecked={selectedColumns.includes(column)}
-                                  onChange={(e) => {
-                                    const columnName = e.target.value;
-                                    if (e.target.checked) {
-                                      setSelectedColumns(prevSelected => [...prevSelected, columnName]);
-                                      setUnselectAll(false);
-                                    } else {
-                                      setSelectedColumns(prevSelected => prevSelected.filter(col => col !== columnName));
-                                    }
-                                  }}
-                                >
-                                  {column}
-                                </Checkbox>
-                              ))}
-                            </Stack>
-                          </CheckboxGroup>
-                        </PopoverBody>
-                      </PopoverContent>
-                    </Popover>
-                  </FormControl>
-                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md"  maxHeight="10rem" overflowY="auto" >
-                    <Text fontWeight="bold">Currently Selected Columns:</Text>
-                    <Wrap spacing={2} mt={2}>
-                      {Array.from(new Set(selectedColumns)).length > 0 ? (
-                        Array.from(new Set(selectedColumns)).map(col => (
-                          <WrapItem key={col}>
-                            <Tag size='md' borderRadius='full' variant='solid' colorScheme='green'>
-                              <TagLabel>{col}</TagLabel>
-                              <TagCloseButton onClick={() => handleRemoveColumn(col)} />
-                            </Tag>
-                          </WrapItem>
-                        ))
-                      ) : (
-                        <Text>No columns selected</Text>
-                      )}
-                    </Wrap>
-                  </Box>
-                  <FormControl>
-                    <HStack spacing={4}>
-                      <Checkbox
-                        isChecked={matchCompanyDomain}
-                        onChange={() => setMatchCompanyDomain(!matchCompanyDomain)}
-                      >
-                        Match Domain
-                      </Checkbox>
-                      <Checkbox
-                        isChecked={matchCompanyName}
-                        onChange={() => setMatchCompanyName(!matchCompanyName)}
-                      >
-                        Match Company Name
-                      </Checkbox>
-                    </HStack>
-                  </FormControl>
-                </>
-              ) : (
-                <>
-                <FormControl>
-                  <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
-                    <PopoverTrigger>
-                      <Button size="md" // Use "md" for a more standard size
-                      bgGradient={gradientBg}
-                      color="white"
-                      _hover={{ bgGradient: hoverBg }}
-                      _active={{ bgGradient: hoverBg }}
-                      borderRadius="full"
-                      boxShadow="md"
-                      px={6} // Set horizontal padding
-                      py={3} // Set vertical padding
-                      maxW="fit-content">Select {ExporttableType} Columns</Button>
-                    </PopoverTrigger>
-                    <PopoverContent>
-                      <PopoverArrow />
-                      <PopoverBody>
-                        <CheckboxGroup
-                          colorScheme="blue"
-                          value={selectedColumns}
-                          onChange={(values) => {
-                            if (values.includes('selectAll')) {
-                              setSelectAll(true);
-                              setSelectedColumns(Contactcolumns);
-                            } else if (values.includes('unselectAll')) {
-                              setUnselectAll(true);
-                              setSelectedColumns([]);
-                            } else {
-                              setSelectAll(false);
-                              setUnselectAll(false);
-                              setSelectedColumns(values);
-                            }
-                          }}
-                        >
-                          <Stack spacing={2}>
-                            <Checkbox
-                              value="selectAll"
-                              isChecked={selectAll}
-                              onChange={(e) => {
-                                const isChecked = e.target.checked;
-                                if (isChecked) {
-                                  setSelectAll(true);
-                                  setSelectedColumns(Contactcolumns);
-                                } else {
-                                  setSelectAll(false);
-                                  setSelectedColumns(prev => prev.filter(col => !Contactcolumns.includes(col)));
-                                }
-                              }}
-                            >
-                              Select All
-                            </Checkbox>
-                            <Checkbox
-                              value="unselectAll"
-                              isChecked={unselectAll}
-                              onChange={(e) => {
-                                const isChecked = e.target.checked;
-                                if (isChecked) {
-                                  setUnselectAll(true);
-                                  setSelectedColumns([]);
-                                } else {
-                                  setUnselectAll(false);
                                   setSelectedColumns(prev => prev.filter(col => !Contactcolumns.includes(col)));
                                 }
                               }}
@@ -886,7 +886,7 @@ const FileUpload = () => {
                       {Array.from(new Set(selectedColumns)).length > 0 ? (
                         Array.from(new Set(selectedColumns)).map(col => (
                           <WrapItem key={col}>
-                            <Tag size='md' borderRadius='full' variant='solid' colorScheme='green'>
+                            <Tag size='md' borderRadius='full' variant='solid' bg='#36C2CE' color='white' _hover={{ bg: '#478CCF' }}>
                               <TagLabel>{col}</TagLabel>
                               <TagCloseButton onClick={() => handleRemoveColumn(col)} />
                             </Tag>
@@ -1015,7 +1015,13 @@ const FileUpload = () => {
         </Modal>
         <Box p={5} pl={10}>
         {/* <Heading mb={4}>Last Activities</Heading> */}
-        <Text fontSize="2xl" mb={4} fontWeight="bold">Last Activities</Text>
+        <Text fontSize="4xl"
+                fontWeight="bold"
+                bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
+                bgClip="text"
+                animation={`${gradient} 4s ease infinite`}
+                backgroundSize="200% 200%"
+                mb={8}>Last Activities</Text>
         <Tabs
             onChange={handleTabChange}
             defaultIndex={0}
@@ -1044,7 +1050,6 @@ const FileUpload = () => {
             </TabList>
             </Tabs>
     <Box
-      maxHeight="500px"
       maxWidth="1400px"
       overflowY="auto"
       overflowX="auto"

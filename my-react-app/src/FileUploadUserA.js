@@ -425,7 +425,7 @@ const FileUploadUserA = () => {
   justifyContent="center"
   bg="gray.200"
   zIndex="1000" // Ensures it stays on top of other content
->
+  >
   <Text fontSize="4xl" fontWeight="bold" textAlign="center">
     ZoomInfo Data Platform
   </Text>
@@ -720,7 +720,7 @@ const FileUploadUserA = () => {
                     </PopoverContent>
                   </Popover>
                 </FormControl>
-                <Box border="1px" borderColor="gray.200" p={4} borderRadius="md">
+                <Box border="1px" borderColor="gray.200" p={4} borderRadius="md" maxHeight="10rem" overflowY="auto">
                   <Text fontWeight="bold">Currently Selected Columns:</Text>
                   <Wrap spacing={2} mt={2}>
                     {Array.from(new Set(selectedColumns)).length > 0 ? (
@@ -771,8 +771,9 @@ const FileUploadUserA = () => {
                     {Contactcolumns.length > 0 ? (
                       Contactcolumns.map(col => (
                         <WrapItem key={col}>
-                          <Tag size='md' borderRadius='full' variant='solid' colorScheme='green'>
+                          <Tag size='md' borderRadius='full' variant='solid' bg='#36C2CE' color='white' _hover={{ bg: '#478CCF' }}>
                             <TagLabel>{col}</TagLabel>
+                            <TagCloseButton onClick={() => handleRemoveColumn(col)} />
                           </Tag>
                         </WrapItem>
                       ))
@@ -825,7 +826,7 @@ const FileUploadUserA = () => {
       </Stack>
 
       {/* Results Modal */}
-      <Modal isOpen={isOpen} onClose={onClose} size="6xl">
+      <Modal isOpen={isOpen} onClose={onClose} size="6xl"  maxHeight = {1}>
           <ModalOverlay />
           <ModalContent>
             <ModalHeader>Matching Results</ModalHeader>
@@ -901,7 +902,13 @@ const FileUploadUserA = () => {
         </Modal>
         <Box p={5} pl={10}>
         {/* <Heading mb={4}>Last Activities</Heading> */}
-        <Text fontSize="2xl" mb={4} fontWeight="bold">Last Activities</Text>
+        <Text fontSize="4xl"
+                fontWeight="bold"
+                bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
+                bgClip="text"
+                animation={`${gradient} 4s ease infinite`}
+                backgroundSize="200% 200%"
+                mb={8}>Last Activities</Text>
       <Tabs
             onChange={handleTabChange}
             defaultIndex={0}
