@@ -753,7 +753,7 @@ const FileUpload = () => {
                       </PopoverContent>
                     </Popover>
                   </FormControl>
-                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md"  >
+                  <Box border="1px" borderColor="gray.200" p={4} borderRadius="md"  maxHeight="10rem" overflowY="auto" >
                     <Text fontWeight="bold">Currently Selected Columns:</Text>
                     <Wrap spacing={2} mt={2}>
                       {Array.from(new Set(selectedColumns)).length > 0 ? (
