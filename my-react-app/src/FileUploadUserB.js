@@ -41,7 +41,7 @@ import {
   WrapItem,
   Tab,
   Tabs,
-  Flex
+  Flex,useColorModeValue, Icon,keyframes
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { saveAs } from 'file-saver';
@@ -435,6 +435,24 @@ const FileUpload = () => {
         setimportLoading(false);
       }
     };
+
+    const boxBg = useColorModeValue("white", "gray.800");
+
+  const gradientBg = useColorModeValue(
+      "linear(to-r, teal.500, blue.500)",
+      "linear(to-r, teal.300, blue.300)"
+    );
+  const hoverBg = useColorModeValue(
+      "linear(to-r, teal.600, blue.600)",
+      "linear(to-r, teal.400, blue.400)"
+    );
+  const gradient = keyframes`
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  `;
+
+
     return (
       <>
     <Flex
@@ -453,49 +471,193 @@ const FileUpload = () => {
   <Box mt="80px"> 
       <VStack spacing={6} p={4} align="stretch">
         <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
-          {/* Import Section */}
-          <Box flex={1} p={4} borderWidth={1} borderRadius="lg">
-            <Text fontSize="2xl" mb={4} fontWeight="bold">Import Data</Text>
-            <Stack spacing={4}>
-            <Tabs onChange={handleImportTabChange} defaultIndex={0}>
+        <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg} >
+            <Text
+              fontSize="4xl"
+              fontWeight="bold"
+              bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
+              bgClip="text"
+              animation={`${gradient} 4s ease infinite`}
+              backgroundSize="200% 200%"
+              mb={8}
+            >
+              Import Data
+            </Text>
+            <Stack spacing={5}>
+              <Tabs
+              onChange={handleImportTabChange}
+              defaultIndex={0}
+              colorScheme="teal"
+              variant="enclosed"
+              >
                   <TabList>
-                    <Tab>Company</Tab>
-                    <Tab>Contact</Tab>
-                  </TabList>
-            </Tabs>
-            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleImportDownload}>
-              Download {ImporttableType} Headers
-            </Button>
-              <FormControl>
-                <FormLabel fontWeight="bold">Upload Excel/CSV File</FormLabel>
-                <Input type="file" accept=".xlsx,.csv" onChange={handleImportFileChange} />
-              </FormControl>
-              <Button colorScheme="blue" onClick={handleImportSubmit} isDisabled={importloading}>
-              {importloading ? <Spinner size="sm" /> : `Import ${ImporttableType} Data`}
-              </Button>
+              <Tab
+                _selected={{
+                  bgGradient: gradientBg,
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              >
+                Company
+              </Tab>
+              <Tab
+                _selected={{
+                  bgGradient: gradientBg,
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              >
+                Contact
+              </Tab>
+            </TabList>
+          </Tabs>
+          <Button
+            onClick={handleImportDownload}
+            size="md" // Use "md" for a more standard size
+            bgGradient={gradientBg}
+            color="white"
+            _hover={{ bgGradient: hoverBg }}
+            _active={{ bgGradient: hoverBg }}
+            borderRadius="full"
+            boxShadow="md"
+            rightIcon={<Icon as={ImDownload3} boxSize={5} />}
+            px={6} // Set horizontal padding
+            py={3} // Set vertical padding
+            maxW="fit-content" // Constrain button width to its content
+          >
+            Download {ImporttableType} Headers
+          </Button>
+          <FormControl>
+            <FormLabel
+              fontWeight="bold"
+              fontSize="lg"
+              color="teal.600"
+              mb={3} // Add some space below the label
+            >
+              Upload Excel/CSV File
+            </FormLabel>
+            <Box
+              borderWidth={1}
+              borderRadius="lg"
+              borderColor="teal.300"
+              padding={3}
+              bg="gray.50"
+              _hover={{ bg: "gray.100" }} // Slight color change on hover
+            >
+              <Input
+                type="file"
+                accept=".xlsx,.csv"
+                onChange={handleImportFileChange}
+                padding={2}
+                border="none"
+                _focusVisible={{ outline: "none" }} // Remove default focus outline
+              />
+            </Box>
+          </FormControl>
+          <Button
+            onClick={handleImportSubmit}
+            size="md" // Use "md" for a more standard size
+            bgGradient={gradientBg}
+            isDisabled={importloading}
+            rightIcon={importloading && <Spinner size="sm" />}
+            color="white"
+            _hover={{ bgGradient: hoverBg }}
+            _active={{ bgGradient: hoverBg }}
+            borderRadius="full"
+            boxShadow="md"
+            px={6} // Set horizontal padding
+            py={3} // Set vertical padding
+            maxW="300" // Constrain button width to its content
+          >
+            {importloading ? "Importing..." : `Import ${ImporttableType} Data`}
+          </Button>
             </Stack>
           </Box>
   
           <Divider orientation={{ base: 'horizontal', md: 'vertical' }} />
   
           {/* File Upload Section */}
-          <Box flex={1} p={4} borderWidth={1} borderRadius="lg">
-            <Text fontSize="2xl" mb={4} fontWeight="bold">Export Data</Text>
-            <Stack spacing={4}>
-            <Tabs onChange={handleExportTabChange} defaultIndex={0}>
-                  <TabList>
-                    <Tab>Company</Tab>
-                    <Tab>Contact</Tab>
-                  </TabList>
-            </Tabs>
-            <Button colorScheme="blue" rightIcon={<ImDownload3 colorScheme='white' />} mt={4} onClick={handleExportDownload}>
+          <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg} >
+          <Text
+              fontSize="4xl"
+              fontWeight="bold"
+              bgGradient="linear(to-r, teal.400, blue.400, pink.400)"
+              bgClip="text"
+              animation={`${gradient} 4s ease infinite`}
+              backgroundSize="200% 200%"
+              mb={8}
+            >
+              Export Data
+            </Text>
+            <Stack spacing={5}>
+            <Tabs
+            onChange={handleExportTabChange}
+            defaultIndex={0}
+            colorScheme="teal"
+            variant="enclosed"
+            >
+            <TabList>
+              <Tab
+                _selected={{
+                  bgGradient: gradientBg,
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              >
+                Company
+              </Tab>
+              <Tab
+                _selected={{
+                  bgGradient: gradientBg,
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              >
+                Contact
+              </Tab>
+            </TabList>
+          </Tabs>
+            <Button onClick={handleExportDownload}
+            size="md" // Use "md" for a more standard size
+            bgGradient={gradientBg}
+            color="white"
+            _hover={{ bgGradient: hoverBg }}
+            _active={{ bgGradient: hoverBg }}
+            borderRadius="full"
+            boxShadow="md"
+            rightIcon={<Icon as={ImDownload3} boxSize={5} />}
+            px={6} // Set horizontal padding
+            py={3} // Set vertical padding
+            maxW="fit-content">
               Download {ExporttableType} Headers
             </Button>
-              <FormControl>
-                <FormLabel fontWeight="bold">Upload Excel File</FormLabel>
-                <Input type="file" accept=".xlsx" onChange={handleFileChange} />
-              </FormControl>
-  
+            <FormControl>
+            <FormLabel
+              fontWeight="bold"
+              fontSize="lg"
+              color="teal.600"
+              mb={3} // Add some space below the label
+            >
+              Upload Excel/CSV File
+            </FormLabel>
+            <Box
+              borderWidth={1}
+              borderRadius="lg"
+              borderColor="teal.300"
+              padding={3}
+              bg="gray.50"
+              _hover={{ bg: "gray.100" }} // Slight color change on hover
+            >
+              <Input
+                type="file"
+                accept=".xlsx"
+                onChange={handleFileChange}
+                padding={2}
+                border="none"
+                _focusVisible={{ outline: "none" }} // Remove default focus outline
+              />
+            </Box>
+          </FormControl> 
               {/* Column Selection */}
               {/* Conditional Rendering Based on Table Type */}
               {ExporttableType === 'Company' ? (
@@ -503,7 +665,16 @@ const FileUpload = () => {
                   <FormControl>
                     <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
                       <PopoverTrigger>
-                        <Button colorScheme="blue" width="full">Select {ExporttableType} Columns</Button>
+                        <Button size="md" // Use "md" for a more standard size
+                      bgGradient={gradientBg}
+                      color="white"
+                      _hover={{ bgGradient: hoverBg }}
+                      _active={{ bgGradient: hoverBg }}
+                      borderRadius="full"
+                      boxShadow="md"
+                      px={6} // Set horizontal padding
+                      py={3} // Set vertical padding
+                      maxW="fit-content">Select {ExporttableType} Columns</Button>
                       </PopoverTrigger>
                       <PopoverContent>
                         <PopoverArrow />
@@ -621,7 +792,16 @@ const FileUpload = () => {
                 <FormControl>
                   <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
                     <PopoverTrigger>
-                      <Button colorScheme="blue" width="full">Select {ExporttableType} Columns</Button>
+                      <Button size="md" // Use "md" for a more standard size
+                      bgGradient={gradientBg}
+                      color="white"
+                      _hover={{ bgGradient: hoverBg }}
+                      _active={{ bgGradient: hoverBg }}
+                      borderRadius="full"
+                      boxShadow="md"
+                      px={6} // Set horizontal padding
+                      py={3} // Set vertical padding
+                      maxW="fit-content">Select {ExporttableType} Columns</Button>
                     </PopoverTrigger>
                     <PopoverContent>
                       <PopoverArrow />
@@ -741,7 +921,17 @@ const FileUpload = () => {
                   </FormControl>
                 </>
               )}
-              <Button colorScheme="blue" onClick={handleExportSubmit} isDisabled={exportloading}>
+              <Button size="md" // Use "md" for a more standard size
+                      bgGradient={gradientBg}
+                      color="white"
+                      _hover={{ bgGradient: hoverBg }}
+                      _active={{ bgGradient: hoverBg }}
+                      borderRadius="full"
+                      boxShadow="md"
+                      px={6} // Set horizontal padding
+                      py={3} // Set vertical padding
+                      maxW="225"
+                      onClick={handleExportSubmit} isDisabled={exportloading}>
               {exportloading ? <Spinner size="sm" /> : `Export ${ExporttableType} Data`}
             </Button>
             </Stack>
@@ -799,9 +989,23 @@ const FileUpload = () => {
                   </Stack>
   
                   {/* Export Button */}
-                  <Button colorScheme="blue" onClick={handleExport}>
-                    Export All Records
-                  </Button>
+                  <Flex justifyContent="center">
+                    <Button
+                      size="md" // Use "md" for a more standard size
+                      bgGradient={gradientBg}
+                      color="white"
+                      _hover={{ bgGradient: hoverBg }}
+                      _active={{ bgGradient: hoverBg }}
+                      borderRadius="full"
+                      boxShadow="md"
+                      px={6} // Set horizontal padding
+                      py={3} // Set vertical padding
+                      maxW="250" // Set maximum width
+                      onClick={handleExport}
+                    >
+                      Export All Records
+                    </Button>
+                  </Flex>
                 </VStack>
               ) : (
                 <Text>No results to display.</Text>
@@ -812,12 +1016,33 @@ const FileUpload = () => {
         <Box p={5} pl={10}>
         {/* <Heading mb={4}>Last Activities</Heading> */}
         <Text fontSize="2xl" mb={4} fontWeight="bold">Last Activities</Text>
-      <Tabs onChange={handleTabChange} defaultIndex={0}>
-      <TabList>
-        <Tab>Company</Tab>
-        <Tab>Contact</Tab>
-      </TabList>
-    </Tabs>
+        <Tabs
+            onChange={handleTabChange}
+            defaultIndex={0}
+            colorScheme="teal"
+            variant="enclosed"
+            >
+          <TabList>
+              <Tab
+                _selected={{
+                  bgGradient: gradientBg,
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              >
+                Company
+              </Tab>
+              <Tab
+                _selected={{
+                  bgGradient: gradientBg,
+                  color: "white",
+                  fontWeight: "bold",
+                }}
+              >
+                Contact
+              </Tab>
+            </TabList>
+            </Tabs>
     <Box
       maxHeight="500px"
       maxWidth="1400px"
@@ -852,7 +1077,17 @@ const FileUpload = () => {
               <Td>{activity.process_tag}</Td>
               <Td>{activity.cnt}</Td>
               <Td>
-                <Button colorScheme="blue" onClick={() => handlelogExport(activity)}>
+                <Button size="md" // Use "md" for a more standard size
+                      bgGradient={gradientBg}
+                      color="white"
+                      _hover={{ bgGradient: hoverBg }}
+                      _active={{ bgGradient: hoverBg }}
+                      borderRadius="full"
+                      boxShadow="md"
+                      px={6} // Set horizontal padding
+                      py={3} // Set vertical padding
+                      maxW="250" // Set maximum width
+                      onClick={() => handlelogExport(activity)}>
                   Download
                 </Button>
               </Td>
