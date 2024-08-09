@@ -43,13 +43,20 @@ import {
   TabList,
   Tab,
   Tabs,
-  Flex,useColorModeValue, Icon,keyframes
+  Flex,useColorModeValue, Icon,keyframes,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { saveAs } from 'file-saver'; 
 import * as XLSX from 'xlsx';
 import { ImDownload3 } from "react-icons/im";
-
+import { ChevronDownIcon } from "@chakra-ui/icons";
+import AuthContext from './AuthContext'; 
+import { useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 const FileUploadUserA = () => {
   // State for Export functionality
   const [file, setFile] = useState(null);
@@ -82,7 +89,15 @@ const FileUploadUserA = () => {
   const [logtableType, setlogTableType] = useState('Company');
 
   const [activities, setActivities] = useState([]);
+  
+  const { user, logout } = useContext(AuthContext);
+  const navigate = useNavigate();
 
+  const handleLogout = () => {
+    logout(); // Clear user data from context and local storage
+    navigate('/'); // Redirect to login page
+  };
+  
 
   const contactImportHeaders  = [
     "ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations"
@@ -418,18 +433,41 @@ const FileUploadUserA = () => {
 
   return (<>
     <Flex
-  position="fixed"
-  top={0}
-  width="100%"
-  alignItems="center"
-  justifyContent="center"
-  bg="gray.200"
-  zIndex="1000" // Ensures it stays on top of other content
-  >
-  <Text fontSize="4xl" fontWeight="bold" textAlign="center">
-    ZoomInfo Data Platform
-  </Text>
-  </Flex>
+      position="fixed"
+      top={0}
+      width="100%"
+      alignItems="center"
+      justifyContent="space-between"
+      bg="rgba(255, 255, 255, 0.1)"
+      backdropFilter="blur(10px)"
+      borderRadius="md"
+      boxShadow="0 4px 6px rgba(0, 0, 0, 0.1)"
+      p={4}
+      zIndex="1000"
+    >
+      <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="medium" color="gray.800">
+        ZoomInfo Data Platform
+      </Text>
+
+      <Menu>
+        <MenuButton
+          as={Button}
+          rightIcon={<ChevronDownIcon />}
+          bgGradient="linear(to-r, teal.400, blue.400)"
+          _hover={{ bgGradient: "linear(to-r, teal.500, blue.500)" }}
+          _focus={{ boxShadow: "outline" }}
+        >
+          <Flex alignItems="center">  
+            <Text color="white" fontWeight="medium">
+            {user?.employeeId || 'Loading...'}  
+            </Text>
+          </Flex>
+        </MenuButton>
+        <MenuList>
+          <MenuItem onClick={handleLogout}>Logout</MenuItem>
+        </MenuList>
+      </Menu>
+    </Flex>
     <Box mt="80px"> 
       <VStack spacing={6} p={4} align="stretch">
         <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>

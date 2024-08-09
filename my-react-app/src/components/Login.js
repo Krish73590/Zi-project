@@ -1,6 +1,5 @@
-// Login.js
 import React, { useState, useContext } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Box, Button, FormControl, FormLabel, Input, Stack, Text, useToast } from '@chakra-ui/react';
 import AuthContext from '../AuthContext';
@@ -20,8 +19,8 @@ const Login = () => {
         employee_id: employeeId,
         password: password,
       });
-      const { user_type } = response.data;
-      login({ employeeId, role: user_type });
+      const { user_type, employee_id } = response.data;
+      login({ employeeId: employee_id, role: user_type });
       if (user_type === 'user_a') {
         navigate('/upload/user_a');
       } else if (user_type === 'user_b') {

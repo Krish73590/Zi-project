@@ -82,7 +82,7 @@ async def login(user_login: UserLogin, db: Session = Depends(get_db)):
     if user and user_login.password == user["password"]:
         employee_id_store['employee_id'] = user_login.employee_id
         employee_role_store['employee_role'] = user["role"]
-        return {"message": "Login successful", "user_type": user["role"]    }
+        return {"message": "Login successful", "user_type": user["role"] , "employee_id":  user_login.employee_id  }
     raise HTTPException(status_code=400, detail="Invalid credentials")
 
 
@@ -195,6 +195,8 @@ async def process_upload(
 ):  
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
+    # employee_id = 'E00860'
+    employee_role_py = employee_role_store.get('employee_role')
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
@@ -290,11 +292,11 @@ async def process_upload(
             df_export['import_time'] = import_time
             df_export['employee_id'] = employee_id
             df_export['file_name'] = filename
-            if selected_columns == ['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Email Address'] and employee_role_store.get('employee_role') == 'user_a':
+            if set(selected_columns) == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
                 df_export['process_tag'] = 'Export - Email'
-            elif selected_columns == ['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'] and employee_role_store.get('employee_role') == 'user_a':
+            elif set(selected_columns) == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
                 df_export['process_tag'] = 'Export - Phone'
-            elif employee_role_store.get('employee_role') == 'user_b':
+            elif employee_role_py == 'user_b':
                 df_export['process_tag'] = 'Export - All'
             df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in list(set(selected_columns)))
             df_export['domain'] = domain
