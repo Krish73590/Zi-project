@@ -16,7 +16,7 @@ from enum import Enum
 from datetime import date
 from pydantic import EmailStr
 from datetime import datetime
-
+import numpy as np
 # Database setup
 DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.dbname}"
 engine = create_engine(DATABASE_URL)
@@ -202,6 +202,8 @@ async def process_upload(
 
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
+
+    print(df)
     if not all(col in df.columns for col in ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
@@ -217,11 +219,6 @@ async def process_upload(
     for _, row in df.iterrows():
         conditions = []
         params = {}
-        domain = row['domain']
-        first_name = row['first_name']
-        last_name = row['last_name']
-        linkedin_url = row['linkedin_url']
-        zi_contact_id = row['zi_contact_id']
         if match_domain:
             conditions.append("\"Website\" = :domain")
             params["domain"] = row['domain']
@@ -261,7 +258,12 @@ async def process_upload(
             for match in result:
                 match_dict = dict(zip(columns, match))
                 # Include the original uploaded data in the result
-                results.append({**dict(row), **match_dict})
+                combined_result = {**dict(row), **match_dict}
+
+                # Replace NaN with None for JSON compatibility
+                combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
+
+                results.append(combined_result)
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -272,7 +274,8 @@ async def process_upload(
         for col in missing_columns:
             df[col] = None 
             
-            
+    print(results)
+    
     if results:
         df_export = pd.DataFrame()
         
@@ -321,6 +324,7 @@ async def process_company_upload(
 ):
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
+    # employee_id = 'E00860'
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
     
@@ -365,8 +369,12 @@ async def process_company_upload(
             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
             for match in result:
                 match_dict = dict(zip(columns, match))
-                # Include the original uploaded data in the result
-                results.append({**dict(row), **match_dict})
+                combined_result = {**dict(row), **match_dict}
+
+                # Replace NaN with None for JSON compatibility
+                combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
+
+                results.append(combined_result)
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
