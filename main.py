@@ -299,11 +299,11 @@ async def process_upload(
             elif employee_role_py == 'user_b':
                 df_export['process_tag'] = 'Export - All'
             df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in list(set(selected_columns)))
-            df_export['domain'] = domain
-            df_export['first_name'] = first_name
-            df_export['last_name'] = last_name
-            df_export['linkedin_url'] = linkedin_url
-            df_export['zi_contact_id'] = zi_contact_id
+            df_export['domain'] = [result.get('domain', None) for result in results]
+            df_export['first_name'] = [result.get('first_name', None) for result in results]
+            df_export['last_name'] = [result.get('last_name', None) for result in results]
+            df_export['linkedin_url'] = [result.get('linkedin_url', None) for result in results]
+            df_export['zi_contact_id'] = [result.get('zi_contact_id', None) for result in results]
             df_export.to_sql('tbl_export_records_zoominfo_contact_paid', db.get_bind(), if_exists='append', index=False)
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
@@ -341,8 +341,6 @@ async def process_company_upload(
     for _, row in df.iterrows():
         conditions = []
         params = {}
-        domain = row['domain']
-        company_name = row['company_name']
         if match_domain:
             conditions.append("\"Website\" = :domain")
             params["domain"] = row['domain']
@@ -400,8 +398,8 @@ async def process_company_upload(
             df_export['file_name'] = filename
             df_export['process_tag'] = 'Export - All'
             df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in list(set(selected_columns)))
-            df_export['domain'] = domain
-            df_export['company_name'] = company_name
+            df_export['domain'] = [result.get('domain', None) for result in results]
+            df_export['company_name'] = [result.get('company_name', None) for result in results]
             df_export.to_sql('tbl_export_records_zoominfo_company_paid', db.get_bind(), if_exists='append', index=False)
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")

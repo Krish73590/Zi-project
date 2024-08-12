@@ -4,8 +4,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ChakraProvider } from '@chakra-ui/react';
 import Login from './components/Login';
 import Register from './components/Register';
-import FileUploadUserA from './FileUploadUserA';
-import FileUploadUserB from './FileUploadUserB';
+import Platform from './Platform';
 import ProtectedRoute from './ProtectedRoute';
 import { AuthProvider } from './AuthContext';
 
@@ -22,7 +21,7 @@ const App = () => {
               path="/upload/user_a" 
               element={
                 <ProtectedRoute requiredRole="user_a">
-                  <FileUploadUserA />
+                  <Platform/>
                 </ProtectedRoute>
               }
             />
@@ -30,7 +29,7 @@ const App = () => {
               path="/upload/user_b" 
               element={
                 <ProtectedRoute requiredRole="user_b">
-                  <FileUploadUserB />
+                  <Platform/>
                 </ProtectedRoute>
               }
             />

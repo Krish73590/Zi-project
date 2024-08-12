@@ -1,16 +1,17 @@
-// ProtectedRoute.js
 import React, { useContext } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import AuthContext from './AuthContext';
 
-const ProtectedRoute = ({ children, requiredRole }) => {
+const ProtectedRoute = ({ children }) => {
   const { user } = useContext(AuthContext);
+  const { employee_id } = useParams(); // Get the dynamic route parameter
 
   if (!user) {
     return <Navigate to="/login" />;
   }
 
-  if (requiredRole && user.role !== requiredRole) {
+  // Check if the user’s employee_id matches the route’s employee_id
+  if (user.employee_id !== employee_id) {
     return <Navigate to="/login" />;
   }
 
