@@ -16,7 +16,6 @@ from enum import Enum
 from datetime import date
 from pydantic import EmailStr
 from datetime import datetime
-import numpy as np
 # Database setup
 DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.dbname}"
 engine = create_engine(DATABASE_URL)
@@ -638,4 +637,3 @@ async def get_last_activities(db: Session = Depends(get_db),table_type: TableTyp
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
