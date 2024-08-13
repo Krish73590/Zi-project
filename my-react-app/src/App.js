@@ -8,6 +8,7 @@ import Platform from './Platform';
 import ProtectedRoute from './ProtectedRoute';
 import { AuthProvider } from './AuthContext';
 
+
 const App = () => {
   return (
     <ChakraProvider>

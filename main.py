@@ -291,6 +291,16 @@ async def process_upload(
             df_export[column] = None
 
         try:
+            db_columns_query = f"""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'tbl_zoominfo_company_paid'
+            ORDER BY ordinal_position
+            """
+            ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
+
+            # Sort selected_columns based on the database order
+            selected_columns_sorted = [col for col in ordered_columns if col in selected_columns]
+            
             df_export['import_time'] = import_time
             df_export['employee_id'] = employee_id
             df_export['file_name'] = filename
@@ -300,13 +310,13 @@ async def process_upload(
                 df_export['process_tag'] = 'Export - Phone'
             elif employee_role_py == 'user_b':
                 df_export['process_tag'] = 'Export - All'
-            df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in list(set(selected_columns)))
+            df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in selected_columns_sorted)
             df_export['domain'] = [result.get('domain', None) for result in results]
             df_export['first_name'] = [result.get('first_name', None) for result in results]
             df_export['last_name'] = [result.get('last_name', None) for result in results]
             df_export['linkedin_url'] = [result.get('linkedin_url', None) for result in results]
             df_export['zi_contact_id'] = [result.get('zi_contact_id', None) for result in results]
-            df_export.to_sql('tbl_export_records_zoominfo_contact_paid', db.get_bind(), if_exists='append', index=False)
+            df_export.to_sql('tbl_zoominfo_contact_paid_log_records', db.get_bind(), if_exists='append', index=False)
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -400,14 +410,24 @@ async def process_company_upload(
             df_export[column] = None
 
         try:
+            db_columns_query = f"""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'tbl_zoominfo_company_paid'
+            ORDER BY ordinal_position
+            """
+            ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
+
+            # Sort selected_columns based on the database order
+            selected_columns_sorted = [col for col in ordered_columns if col in selected_columns]
+
             df_export['import_time'] = import_time
             df_export['employee_id'] = employee_id
             df_export['file_name'] = filename
             df_export['process_tag'] = 'Export - All'
-            df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in list(set(selected_columns)))
+            df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in selected_columns_sorted)
             df_export['domain'] = [result.get('domain', None) for result in results]
             df_export['company_name'] = [result.get('company_name', None) for result in results]
-            df_export.to_sql('tbl_export_records_zoominfo_company_paid', db.get_bind(), if_exists='append', index=False)
+            df_export.to_sql('tbl_zoominfo_company_paid_log_records', db.get_bind(), if_exists='append', index=False)
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -508,9 +528,9 @@ async def import_data(
         file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
 
         if table_type == TableType.contact:
-            table_name = 'tbl_export_records_zoominfo_contact_paid'
+            table_name = 'tbl_zoominfo_contact_paid_log_records'
         elif table_type == TableType.company:
-            table_name = 'tbl_export_records_zoominfo_company_paid'
+            table_name = 'tbl_zoominfo_company_paid_log_records'
         print(columns)
         try:
             data['import_time'] = import_time
@@ -558,9 +578,9 @@ async def download_activity(
     try:
         # Determine the table name based on table_type
         if table_type == TableType.contact:
-            table_name = 'tbl_export_records_zoominfo_contact_paid'
+            table_name = 'tbl_zoominfo_contact_paid_log_records'
         elif table_type == TableType.company:
-            table_name = 'tbl_export_records_zoominfo_company_paid'
+            table_name = 'tbl_zoominfo_company_paid_log_records'
 
         if table_type == TableType.contact:
             cols = """ "tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" """
@@ -615,9 +635,9 @@ async def get_last_activities(db: Session = Depends(get_db),table_type: TableTyp
     try:
         # Determine the table name based on table_type
         if table_type == TableType.contact:
-            table_name = 'tbl_export_records_zoominfo_contact_paid'
+            table_name = 'tbl_zoominfo_contact_paid_log_records'
         elif table_type == TableType.company:
-            table_name = 'tbl_export_records_zoominfo_company_paid'
+            table_name = 'tbl_zoominfo_company_paid_log_records'
         
         
         query = text(f"""

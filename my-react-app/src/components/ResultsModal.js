@@ -31,8 +31,59 @@ const ResultsModal = ({
   handlePageChange,
   handleExport,
   gradientBg,
-  hoverBg
+  hoverBg,
+  selectedOption,
+  allContactColumns,
+  selectedColumns,
+  allCompanyColumns,
+  ExporttableType
 }) => {
+
+  const sortedColumn = () => {
+    let columnOrder = [];
+  
+    if (ExporttableType === 'Company') {
+      // Ensure that selectedColumns is ordered according to allCompanyColumns
+      columnOrder = selectedColumns.slice().sort(
+        (a, b) => selectedColumns.indexOf(a) - allCompanyColumns.indexOf(b)
+      );
+    } else {
+      if (selectedOption === 'Email') {
+        columnOrder = ["ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Email Address"];
+      } else if (selectedOption === 'Phone') {
+        columnOrder = ["ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Mobile phone", "Direct Phone Number", "Company HQ Phone"];
+      } else {
+        // Ensure that selectedColumns is ordered according to allContactColumns
+        columnOrder = selectedColumns.slice().sort(
+          (a, b) => selectedColumns.indexOf(a) - allContactColumns.indexOf(b)
+        );
+      }
+    }
+  
+    let columnfinalorder = [];
+  
+    if (ExporttableType === 'Company') {
+      columnfinalorder = ["domain", "company_name", ...columnOrder];
+    } else if (ExporttableType === 'Contact') {
+      columnfinalorder = ["domain", "first_name", "last_name", "linkedin_url", "zi_contact_id", ...columnOrder];
+    }
+  
+    // Convert to Set to ensure unique columns and then back to Array
+    return Array.from(new Set(columnfinalorder));
+  };
+
+  // Render data in the order defined by sortedColumn
+  const renderDataInOrder = (rowData) => {
+    const columnOrder = sortedColumn();
+    return columnOrder.map((col) => (
+      <Td key={col}>
+        {rowData[col] || '-'} {/* Handle missing values */}
+      </Td>
+    ));
+  };
+
+  const columnOrder = sortedColumn();
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="6xl">
       <ModalOverlay />
@@ -47,7 +98,7 @@ const ResultsModal = ({
                 <Table variant="simple">
                   <Thead>
                     <Tr>
-                      {Object.keys(results[0] || {}).map((key) => (
+                      {columnOrder.map((key) => (
                         <Th key={key}>{key}</Th>
                       ))}
                     </Tr>
@@ -55,9 +106,7 @@ const ResultsModal = ({
                   <Tbody>
                     {displayedResults.map((result, index) => (
                       <Tr key={index}>
-                        {Object.values(result).map((value, i) => (
-                          <Td key={i}>{value}</Td>
-                        ))}
+                        {renderDataInOrder(result)}
                       </Tr>
                     ))}
                   </Tbody>
