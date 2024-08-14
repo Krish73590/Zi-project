@@ -69,7 +69,7 @@ const ExportDataBoxUserA = ({
   const [matchZIContactID, setMatchZIContactID] = useState(false);
   const [selectedOption, setSelectedOption] = useState('');
   // const columnOrder = ["domain","first_name","last_name","linkedin_url","zi_contact_id","ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Email Address"];
-
+  const [uploadedFileName, setUploadedFileName] = useState('results');
 
 
   const handleExportTabChange = (index) => {
@@ -125,6 +125,8 @@ const ExportDataBoxUserA = ({
       return;
     }
 
+    setUploadedFileName(file.name.replace(/\.[^/.]+$/, "") || 'results');
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('table_type', ExporttableType);
@@ -141,7 +143,7 @@ const ExportDataBoxUserA = ({
 
     setexportLoading(true);
     try {
-      const response = await axios.post('http://localhost:8000/upload/user_a', formData, {
+      const response = await axios.post('http://192.168.1.125:8000/upload/user_a', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -267,7 +269,7 @@ const ExportDataBoxUserA = ({
 
     const csvString = csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv' });
-    saveAs(blob, 'results.csv');
+    saveAs(blob, `${uploadedFileName}_results.csv`);
   };
 
   const popoverRef = useRef();

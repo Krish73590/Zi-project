@@ -66,7 +66,7 @@ const ExportDataBoxUserB = ({
   const [matchZIContactID, setMatchZIContactID] = useState(false);
   const allContactColumns = ["tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" ]
   const allCompanyColumns = ['tbl_zoominfo_company_paid_id',	'ZoomInfo Company ID',	'Company Name',	'Website',	'Founded Year',	'Company HQ Phone']
-
+  const [uploadedFileName, setUploadedFileName] = useState('results');
 
 
 
@@ -123,7 +123,9 @@ const ExportDataBoxUserB = ({
       return;
     }
 
-     const formData = new FormData();
+    setUploadedFileName(file.name.replace(/\.[^/.]+$/, "") || 'results');
+
+    const formData = new FormData();
     formData.append('file', file);
     formData.append('table_type', ExporttableType);
     if (ExporttableType === 'Company') {
@@ -139,7 +141,7 @@ const ExportDataBoxUserB = ({
 
     setexportLoading(true);
     try {
-      const response = await axios.post('http://localhost:8000/upload/user_a', formData, {
+      const response = await axios.post('http://192.168.1.125:8000/upload/user_a', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -173,7 +175,7 @@ const ExportDataBoxUserB = ({
     const fetchColumns = async () => {
       try {
         const endpoint = ExporttableType === 'Company' ? '/company-columns/' : '/contact-columns/';
-        const response = await axios.get(`http://localhost:8000${endpoint}`);
+        const response = await axios.get(`http://192.168.1.125:8000${endpoint}`);
         // Ensure unique columns
         const uniqueColumns = [...new Set(response.data.columns)];
         if (ExporttableType === 'Company') {
@@ -289,7 +291,7 @@ const ExportDataBoxUserB = ({
 
     const csvString = csvRows.join('\n');
     const blob = new Blob([csvString], { type: 'text/csv' });
-    saveAs(blob, 'results.csv');
+    saveAs(blob, `${uploadedFileName}_results.csv`);
   };
 
   const popoverRef = useRef();

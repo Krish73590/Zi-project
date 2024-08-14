@@ -184,6 +184,16 @@ async def upload_file_user_b(
             file, selected_columns, match_company_domain, match_company_name, db
         )
 
+def clean_url(url):
+    if pd.isna(url):
+        return url
+    url = url.lower()
+    url = url.replace('https://', '')
+    url = url.replace('http://', '')
+    url = url.replace('www.', '')
+    url = url.replace('www', '')
+    return url.strip()
+
 async def process_upload(
     file: UploadFile,
     selected_columns: str,
@@ -202,7 +212,7 @@ async def process_upload(
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
 
-    print(df)
+    # print(df)
     if not all(col in df.columns for col in ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
@@ -215,16 +225,24 @@ async def process_upload(
     results = []
     import_time = datetime.now()
     
+    
+    if 'domain' in df.columns:
+        df['domain'] = df['domain'].apply(clean_url)
+        
+    clean_website_expr = "REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER (\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')"
+
+    
     for _, row in df.iterrows():
         conditions = []
         params = {}
         if match_domain:
-            conditions.append("\"Website\" = :domain")
+            # conditions.append("\"Website\" = :domain")
+            conditions.append(f"{clean_website_expr} = :domain")
             params["domain"] = row['domain']
-            conditions.append("\"First Name\" = :first_name")
-            params["first_name"] = row['first_name']
-            conditions.append("\"Last Name\" = :last_name")
-            params["last_name"] = row['last_name']
+            conditions.append("LOWER(\"First Name\") = :first_name")
+            params["first_name"] = row['first_name'].lower() if row['first_name'] is not None else None
+            conditions.append("LOWER(\"Last Name\") = :last_name")
+            params["last_name"] = row['last_name'].lower() if row['last_name'] is not None else None
         if match_linkedin_url:
             conditions.append("\"LinkedIn Contact Profile URL\" = :linkedin_url")
             params["linkedin_url"] = row['linkedin_url']
@@ -247,7 +265,7 @@ async def process_upload(
         select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
 
         query = f"""
-        SELECT {select_columns} FROM tbl_zoominfo_contact_paid
+        SELECT DISTINCT {select_columns} FROM tbl_zoominfo_contact_paid
         WHERE {where_clause}
         """
         # print({select_columns})
@@ -273,7 +291,6 @@ async def process_upload(
         for col in missing_columns:
             df[col] = None 
             
-    print(results)
     
     if results:
         df_export = pd.DataFrame()
@@ -351,16 +368,21 @@ async def process_company_upload(
     results = []
     import_time = datetime.now()
     
+    if 'domain' in df.columns:
+        df['domain'] = df['domain'].apply(clean_url)
+        
+    clean_website_expr = "REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER (\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')"
+
+
     for _, row in df.iterrows():
         conditions = []
         params = {}
         if match_domain:
-            conditions.append("\"Website\" = :domain")
+            conditions.append(f"{clean_website_expr} = :domain")
             params["domain"] = row['domain']
         if match_company_name:
-            conditions.append("\"Company Name\" = :company_name")
-            params["company_name"] = row['company_name']
-            
+            conditions.append("LOWER(\"Company Name\") = :company_name")
+            params["company_name"] = row['company_name'].lower() if row['company_name'] is not None else None
             
         if not conditions:
             conditions.append("0=1")
@@ -369,7 +391,7 @@ async def process_company_upload(
         select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
 
         query = f"""
-        SELECT {select_columns} FROM tbl_zoominfo_company_paid
+        SELECT DISTINCT {select_columns} FROM tbl_zoominfo_company_paid
         WHERE {where_clause}
         """
         
@@ -504,7 +526,7 @@ async def import_data(
         if 'db_file_name' in table_columns:
             data['db_file_name'] = file.filename
 
-        print(data)
+        # print(data)
         # Filter columns that are present in the table
         data = data[[col for col in data.columns if col in table_columns]]
         
@@ -516,7 +538,7 @@ async def import_data(
         import_time = datetime.now()
         columns = ', '.join(f'"{col}"' for col in data.columns)
         copy_query = f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-        print(columns)
+        # print(columns)
         with open(temp_csv_path, 'r', encoding='utf-8') as f:
             cursor.copy_expert(copy_query, f)
         
@@ -531,7 +553,7 @@ async def import_data(
             table_name = 'tbl_zoominfo_contact_paid_log_records'
         elif table_type == TableType.company:
             table_name = 'tbl_zoominfo_company_paid_log_records'
-        print(columns)
+        # print(columns)
         try:
             data['import_time'] = import_time
             data['employee_id'] = employee_id

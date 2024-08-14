@@ -38,7 +38,7 @@ const Register = () => {
     try {
 
       // Register the new user with role 'user_a'
-      await axios.post('http://localhost:8000/register/', { 
+      await axios.post('http://192.168.1.125:8000/register/', { 
         employee_id,
         employee_name,
         first_name,

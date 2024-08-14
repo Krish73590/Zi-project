@@ -1,7 +1,7 @@
 dbname="postgres"
 user="postgres"
 password="Password123*"
-host="localhost"
+host="192.168.1.125"
 port="5432"
 
 # dbname="data_assets"
