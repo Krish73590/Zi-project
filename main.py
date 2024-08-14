@@ -679,3 +679,5 @@ async def get_last_activities(db: Session = Depends(get_db),table_type: TableTyp
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+    
+    #Hello how are you
