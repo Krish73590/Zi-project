@@ -15,7 +15,7 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://192.168.1.125:8000/login/', {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/login/`, {
         employee_id: employeeId,
         password: password,
       });

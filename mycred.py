@@ -1,11 +1,11 @@
-dbname="postgres"
-user="postgres"
-password="Password123*"
-host="192.168.1.125"
-port="5432"
+import os
+from dotenv import load_dotenv
+load_dotenv()
+import urllib.parse
 
-# dbname="data_assets"
-# user="ia_krish"
-# password="Krg1206*"
-# host="192.168.3.243"
-# port="5432"
+dbname=os.getenv('DB_NAME')
+user=os.getenv('DB_USER')
+password=os.getenv('DB_PASSWORD')
+password = urllib.parse.quote_plus(password)
+host=os.getenv('DB_HOST')
+port=os.getenv('DB_PORT')

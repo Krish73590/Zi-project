@@ -143,7 +143,7 @@ const ExportDataBoxUserA = ({
 
     setexportLoading(true);
     try {
-      const response = await axios.post('http://192.168.1.125:8000/upload/user_a', formData, {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/user_a`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

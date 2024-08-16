@@ -63,7 +63,7 @@ def get_db():
 
 # Helper function to get user type
 async def get_user_from_db(employee_id: str, db: Session) -> Optional[dict]:
-    query = text("SELECT password, role FROM ia_users WHERE employee_id = :employee_id")
+    query = text("SELECT password, role FROM ia_users_zi WHERE employee_id = :employee_id")
     result = db.execute(query, {"employee_id": employee_id}).fetchone()
     if result:
         # Convert result tuple to dictionary
@@ -77,16 +77,13 @@ employee_role_store = {}
 # Login endpoint
 @app.post("/login/")
 async def login(user_login: UserLogin, db: Session = Depends(get_db)):
-    try:
-        user = await get_user_from_db(user_login.employee_id, db)
-        if user and user_login.password == user["password"]:
-            employee_id_store['employee_id'] = user_login.employee_id
-            employee_role_store['employee_role'] = user["role"]
-            return {"message": "Login successful", "user_type": user["role"], "employee_id": user_login.employee_id}
-        else:
-            raise HTTPException(status_code=400, detail="Invalid credentials")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+    user = await get_user_from_db(user_login.employee_id, db)
+    if user and user_login.password == user["password"]:
+        employee_id_store['employee_id'] = user_login.employee_id
+        employee_role_store['employee_role'] = user["role"]
+        return {"message": "Login successful", "user_type": user["role"] , "employee_id":  user_login.employee_id  }
+    raise HTTPException(status_code=400, detail="Invalid credentials")
+
 
 
 @app.post("/register/")
@@ -98,7 +95,7 @@ async def register(user_register: UserRegister, db: Session = Depends(get_db)):
 
     # Insert new user into the database with role 'user_a'
     query = text("""
-        INSERT INTO ia_users (employee_id, password, employee_name, first_name, last_name, email, date_of_birth, date_of_join, designation, department, blood_group, mobile_no,role)
+        INSERT INTO ia_users_zi (employee_id, password, employee_name, first_name, last_name, email, date_of_birth, date_of_join, designation, department, blood_group, mobile_no,role)
         VALUES (:employee_id, :password, :employee_name, :first_name, :last_name, :email, :date_of_birth, :date_of_join, :designation, :department, :blood_group, :mobile_no,:role)
     """)
     db.execute(query, {
@@ -577,6 +574,13 @@ async def import_data(
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
+        # Log the upload event
+        log_query = """
+            INSERT INTO tbl_audit_lookup_log (data_point, file_name, count)
+            VALUES (%s, %s, %s)
+        """
+        cursor.execute(log_query, (table_type, file.filename, records_inserted))
+        conn.commit()
 
     cursor.close()
     conn.close()

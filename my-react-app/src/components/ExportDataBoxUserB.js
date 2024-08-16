@@ -141,7 +141,7 @@ const ExportDataBoxUserB = ({
 
     setexportLoading(true);
     try {
-      const response = await axios.post('http://192.168.1.125:8000/upload/user_a', formData, {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/user_a`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -175,7 +175,7 @@ const ExportDataBoxUserB = ({
     const fetchColumns = async () => {
       try {
         const endpoint = ExporttableType === 'Company' ? '/company-columns/' : '/contact-columns/';
-        const response = await axios.get(`http://192.168.1.125:8000${endpoint}`);
+        const response = await axios.get(`${process.env.REACT_APP_API_URL}${endpoint}`);
         // Ensure unique columns
         const uniqueColumns = [...new Set(response.data.columns)];
         if (ExporttableType === 'Company') {

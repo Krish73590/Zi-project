@@ -72,7 +72,7 @@ const Platform = () => {
   
   useEffect(() => {
     console.log(`Fetching data for tableType: ${logtableType}`);
-    axios.get(`http://192.168.1.125:8000/user/last-activities/?table_type=${logtableType}`)
+    axios.get(`${process.env.REACT_APP_API_URL}/user/last-activities/?table_type=${logtableType}`)
       .then(response => {
         console.log('Data fetched:', response.data);
         setActivities(response.data);
@@ -84,7 +84,7 @@ const Platform = () => {
 
   const handlelogExport = async (activity) => {
     try {
-      const response = await axios.get(`http://192.168.1.125:8000/user/download-activity/`, {
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}/user/download-activity/`, {
         params: {
           employee_id: activity.employee_id,
           import_time: activity.import_time,
@@ -141,7 +141,7 @@ const Platform = () => {
 
     setimportLoading(true);
     try {
-      const response = await axios.post('http://192.168.1.125:8000/import/', formData, {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/import/`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
