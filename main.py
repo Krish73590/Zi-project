@@ -77,13 +77,16 @@ employee_role_store = {}
 # Login endpoint
 @app.post("/login/")
 async def login(user_login: UserLogin, db: Session = Depends(get_db)):
-    user = await get_user_from_db(user_login.employee_id, db)
-    if user and user_login.password == user["password"]:
-        employee_id_store['employee_id'] = user_login.employee_id
-        employee_role_store['employee_role'] = user["role"]
-        return {"message": "Login successful", "user_type": user["role"] , "employee_id":  user_login.employee_id  }
-    raise HTTPException(status_code=400, detail="Invalid credentials")
-
+    try:
+        user = await get_user_from_db(user_login.employee_id, db)
+        if user and user_login.password == user["password"]:
+            employee_id_store['employee_id'] = user_login.employee_id
+            employee_role_store['employee_role'] = user["role"]
+            return {"message": "Login successful", "user_type": user["role"], "employee_id": user_login.employee_id}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid credentials")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/register/")
@@ -574,13 +577,6 @@ async def import_data(
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
-        # Log the upload event
-        log_query = """
-            INSERT INTO tbl_audit_lookup_log (data_point, file_name, count)
-            VALUES (%s, %s, %s)
-        """
-        cursor.execute(log_query, (table_type, file.filename, records_inserted))
-        conn.commit()
 
     cursor.close()
     conn.close()
@@ -679,5 +675,3 @@ async def get_last_activities(db: Session = Depends(get_db),table_type: TableTyp
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-    
-    #Hello how are you
