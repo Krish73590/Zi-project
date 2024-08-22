@@ -131,7 +131,7 @@ const ExportDataBoxUserB = ({
     if (ExporttableType === 'Company') {
       formData.append('selected_columns', selectedColumns.join(','));
     } else {
-      formData.append('selected_columns', Contactcolumns.join(','));
+      formData.append('selected_columns', selectedColumns.join(','));
     }
     formData.append('match_contact_domain', matchContactDomain);
     formData.append('match_company_domain', matchCompanyDomain);
@@ -141,7 +141,7 @@ const ExportDataBoxUserB = ({
 
     setexportLoading(true);
     try {
-      const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/user_a`, formData, {
+      const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/user_b`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

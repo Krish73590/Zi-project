@@ -21,6 +21,9 @@ DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.db
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+UPLOAD_FOLDER = 'uploads/'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 app = FastAPI()
 
 # Allow CORS for specified origins
@@ -209,6 +212,7 @@ async def process_upload(
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
+    
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
 
@@ -218,10 +222,11 @@ async def process_upload(
 
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
     selected_columns = list(set(selected_columns))
-    # print(selected_columns)
     if not selected_columns:
         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
 
+    
+    # print(selected_columns)
     results = []
     import_time = datetime.now()
     
@@ -248,11 +253,14 @@ async def process_upload(
             params["linkedin_url"] = row['linkedin_url']
         if match_zi_contact_id:
             try:
-                if isinstance(row['zi_contact_id'], (float, int)):
-                    row['zi_contact_id'] = str(int(row['zi_contact_id']))
-                else:
+                # Check if it's already a string
+                if isinstance(row['zi_contact_id'], str):
                     row['zi_contact_id'] = str(row['zi_contact_id'])
-            except (ValueError, TypeError):
+                else:
+                    # Convert to int if it's numeric, then to string
+                    row['zi_contact_id'] = str(int(float(row['zi_contact_id'])))
+            except ValueError:
+                # Fallback if conversion fails
                 row['zi_contact_id'] = str(row['zi_contact_id'])
             
             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
@@ -290,7 +298,6 @@ async def process_upload(
     if missing_columns:
         for col in missing_columns:
             df[col] = None 
-            
     
     if results:
         df_export = pd.DataFrame()
@@ -310,14 +317,15 @@ async def process_upload(
         try:
             db_columns_query = f"""
             SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'tbl_zoominfo_company_paid'
+            WHERE table_name = 'tbl_zoominfo_contact_paid'
             ORDER BY ordinal_position
             """
             ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
-
             # Sort selected_columns based on the database order
-            selected_columns_sorted = [col for col in ordered_columns if col in selected_columns]
-            
+            final_columns = [col for col in ordered_columns if col in selected_columns]
+            excel_cols = ["domain", "first_name", "last_name", "linkedin_url", "zi_contact_id"]
+            selected_columns_sorted = excel_cols + final_columns
+
             df_export['import_time'] = import_time
             df_export['employee_id'] = employee_id
             df_export['file_name'] = filename
@@ -440,8 +448,11 @@ async def process_company_upload(
             ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
 
             # Sort selected_columns based on the database order
-            selected_columns_sorted = [col for col in ordered_columns if col in selected_columns]
-
+            final_columns = [col for col in ordered_columns if col in selected_columns]
+            excel_cols = ["domain", "company_name"]
+            
+            selected_columns_sorted  = excel_cols + final_columns
+            
             df_export['import_time'] = import_time
             df_export['employee_id'] = employee_id
             df_export['file_name'] = filename
@@ -457,137 +468,125 @@ async def process_company_upload(
     return {"matches": results}
 
 
-UPLOAD_FOLDER = 'uploads/'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-db_config = {
-    "dbname": mc.dbname,
-    "user": mc.user,
-    "password": mc.password,
-    "host": mc.host,
-    "port": mc.port,
-}
-
-def connect_db():
-    return psycopg2.connect(**db_config)
-
-
-
-# Define an enum for valid table types
-    
 @app.post("/import/")
 async def import_data(
     table_type: TableType = Form(...),  # Use TableType enum to restrict input
     files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db)
 ):  
-    employee_id = employee_id_store.get('employee_id')
+    # employee_id = employee_id_store.get('employee_id')
+    employee_id = 'T01294'
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
+
     table_name = 'tbl_zoominfo_company_paid' if table_type == TableType.company else 'tbl_zoominfo_contact_paid'
-    conn = connect_db()
-    cursor = conn.cursor()
 
-   # Retrieve column names from the selected table
-    cursor.execute("""
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_name = %s
-    """, (table_name,))
-    table_columns = set(row[0] for row in cursor.fetchall())
+    session = SessionLocal()
 
-    total_records_inserted = 0
-    file_messages = []
+    try:
+        # Retrieve column names from the selected table
+        table_columns_query = text("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_name = :table_name
+        """)
+        table_columns = set(row[0] for row in session.execute(table_columns_query, {'table_name': table_name}))
 
-    for file in files:
-        if file.filename == '':
-            continue
-        
-        file_content = await file.read()
-        file_stream = io.BytesIO(file_content)
+        total_records_inserted = 0
+        file_messages = []
 
-        if file.filename.endswith('.xlsx'):
-            data = pd.read_excel(file_stream, engine='openpyxl')
-        elif file.filename.endswith('.csv'):
-            data = pd.read_csv(file_stream, encoding='utf-8', dtype=str)
-        else:
-            continue
+        for file in files:
+            if file.filename == '':
+                continue
 
-        # Clean data and filter columns
-        data.columns = [col.strip() for col in data.columns]
-        file_columns = set(data.columns)
-        
-        # Check for new columns
-        new_columns = file_columns - table_columns
-        if new_columns:
-            file_messages.append(f"File '{file.filename}': New columns detected {new_columns}. Data not inserted.")
-            continue
+            file_content = await file.read()
+            file_stream = io.BytesIO(file_content)
 
-        # Add db_file_name column if it exists in the table schema
-        if 'db_file_name' in table_columns:
-            data['db_file_name'] = file.filename
+            if file.filename.endswith('.xlsx'):
+                data = pd.read_excel(file_stream, engine='openpyxl')
+            elif file.filename.endswith('.csv'):
+                data = pd.read_csv(file_stream, encoding='utf-8', dtype=str)
+            else:
+                continue
 
-        # print(data)
-        # Filter columns that are present in the table
-        data = data[[col for col in data.columns if col in table_columns]]
-        
-        # Insert data into the database
-        data = data.where(pd.notna(data), None)  # Replace NaNs with None
-
-        temp_csv_path = os.path.join(UPLOAD_FOLDER, f'temp_{file.filename}')
-        data.to_csv(temp_csv_path, index=False, header=False, encoding='utf-8')
-        import_time = datetime.now()
-        columns = ', '.join(f'"{col}"' for col in data.columns)
-        copy_query = f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT CSV, HEADER FALSE)"
-        # print(columns)
-        with open(temp_csv_path, 'r', encoding='utf-8') as f:
-            cursor.copy_expert(copy_query, f)
-        
-        conn.commit()
-        os.remove(temp_csv_path)
-
-        records_inserted = len(data)
-        total_records_inserted += records_inserted
-        file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
-
-        if table_type == TableType.contact:
-            table_name = 'tbl_zoominfo_contact_paid_log_records'
-        elif table_type == TableType.company:
-            table_name = 'tbl_zoominfo_company_paid_log_records'
-        # print(columns)
-        try:
-            data['import_time'] = import_time
-            data['employee_id'] = employee_id
-            data['file_name'] = file.filename
-            data['process_tag'] = 'Import'
-            data['selected_cols'] = columns
-            if table_type == TableType.company:
-                data['domain'] = None
-                data['company_name'] = None
-            elif table_type == TableType.contact:
-                data['domain'] = None
-                data['first_name'] = None
-                data['last_name'] = None
-                data['linkedin_url'] = None
-                data['zi_contact_id'] = None
+            # Clean data and filter columns
+            data.columns = [col.strip() for col in data.columns]
             
-            data.to_sql(table_name, engine, if_exists='append', index=False)
-        except Exception as e:
-            print(f"An error occurred while inserting export records: {e}")
-            return JSONResponse(content={"error": str(e)}, status_code=500)
-        # Log the upload event
-        log_query = """
-            INSERT INTO tbl_audit_lookup_log (data_point, file_name, count)
-            VALUES (%s, %s, %s)
-        """
-        cursor.execute(log_query, (table_type, file.filename, records_inserted))
-        conn.commit()
 
-    cursor.close()
-    conn.close()
+            # Add db_file_name column if it exists in the table schema
+            if 'db_file_name' in table_columns:
+                data['db_file_name'] = file.filename
 
-    return JSONResponse(content={"message": f"{total_records_inserted} records imported successfully.", "file_messages": file_messages})
+            # Filter columns that are present in the table
+            data = data[[col for col in data.columns if col in table_columns]]
+            
+            # Insert data into the database
+            data = data.where(pd.notna(data), None)  # Replace NaNs with None
+            # Insert data into the database
+            columns = ', '.join(f'"{col}"' for col in data.columns if col != 'tbl_zoominfo_company_paid_id')
+            # print(columns)
+            placeholders = ', '.join(['%s'] * (len(data.columns)))
+            print(placeholders)
+            insert_query = f"""
+                INSERT INTO {table_name} ({columns})
+                VALUES ({placeholders})
+            """
+            # print(insert_query)
 
+            with db.connection().connection.cursor() as cursor:
+                for _, row in data.iterrows():
+                    try:
+                        cursor.execute(insert_query, tuple(row[col] for col in data.columns if col != 'tbl_zoominfo_company_paid_id'))
+                    except Exception as e:
+                        print(f"Error occurred: {e}")
+                        db.rollback()
+                        file_messages.append(f"File '{file.filename}': Error inserting data - {str(e)}")
+                        break
+                db.commit()
 
+            records_inserted = len(data)
+            total_records_inserted += records_inserted
+            file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
+
+            # Log the upload event
+            import_time = datetime.now()
+            
+            if table_type == TableType.contact:
+                log_table_name = 'tbl_zoominfo_contact_paid_log_records'
+            elif table_type == TableType.company:
+                log_table_name = 'tbl_zoominfo_company_paid_log_records'
+                
+            try:
+                log_data = data.copy()
+                log_data['import_time'] = import_time
+                log_data['employee_id'] = employee_id
+                log_data['file_name'] = file.filename
+                log_data['process_tag'] = 'Import'
+                log_data['selected_cols'] = columns
+                if table_type == TableType.company:
+                    log_data['domain'] = None
+                    log_data['company_name'] = None
+                elif table_type == TableType.contact:
+                    log_data['domain'] = None
+                    log_data['first_name'] = None
+                    log_data['last_name'] = None
+                    log_data['linkedin_url'] = None
+                    log_data['zi_contact_id'] = None
+                
+                log_data.to_sql(log_table_name, engine, if_exists='append', index=False)
+                db.commit()
+            except Exception as e:
+                print(f"An error occurred while inserting log records: {e}")
+                db.rollback()
+                return JSONResponse(content={"error": str(e)}, status_code=500)
+
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+    finally:
+        db.close()
+
+    return JSONResponse(content={"message": f"Total records inserted: {total_records_inserted}", "file_messages": file_messages})
 
 @app.get("/user/download-activity/")
 async def download_activity(
@@ -626,7 +625,7 @@ async def download_activity(
 
 # Convert list of columns to a comma-separated string
         cols_str = ", ".join(cols)
-            
+        
         query = text(f"""
         SELECT {cols_str}, {column_names_str}
         FROM {table_name}
