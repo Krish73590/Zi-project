@@ -215,8 +215,9 @@ async def process_upload(
     
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
-
-    # print(df)
+    df['zi_contact_id'] = df['zi_contact_id'].astype(str)
+    print(df.dtypes)
+    
     if not all(col in df.columns for col in ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
