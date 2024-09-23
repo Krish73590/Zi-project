@@ -39,37 +39,48 @@ const ResultsModal = ({
   ExporttableType
 }) => {
 
+  // Function to get all unique columns from results
+  const getAllColumnsFromResults = () => {
+    const allColumnsSet = new Set();
+
+    results.forEach(result => {
+      Object.keys(result).forEach(key => {
+        allColumnsSet.add(key);
+      });
+    });
+
+    return Array.from(allColumnsSet);
+  };
+
+  // Function to determine column order
   const sortedColumn = () => {
     let columnOrder = [];
-  
+
+    const resultColumns = getAllColumnsFromResults();
+
     if (ExporttableType === 'Company') {
-      // Ensure that selectedColumns is ordered according to allCompanyColumns
-      columnOrder = selectedColumns.slice().sort(
-        (a, b) => selectedColumns.indexOf(a) - allCompanyColumns.indexOf(b)
-      );
+      columnOrder = resultColumns;
     } else {
       if (selectedOption === 'Email') {
         columnOrder = ["ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Email Address"];
       } else if (selectedOption === 'Phone') {
         columnOrder = ["ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Mobile phone", "Direct Phone Number", "Company HQ Phone"];
       } else {
-        // Ensure that selectedColumns is ordered according to allContactColumns
-        columnOrder = selectedColumns.slice().sort(
-          (a, b) => selectedColumns.indexOf(a) - allContactColumns.indexOf(b)
-        );
+        columnOrder = resultColumns;
       }
     }
-  
-    let columnfinalorder = [];
-  
-    if (ExporttableType === 'Company') {
-      columnfinalorder = ["domain", "company_name", ...columnOrder];
-    } else if (ExporttableType === 'Contact') {
-      columnfinalorder = ["domain", "first_name", "last_name", "linkedin_url", "zi_contact_id", ...columnOrder];
-    }
-  
-    // Convert to Set to ensure unique columns and then back to Array
-    return Array.from(new Set(columnfinalorder));
+
+    // Define a preferred order for some columns
+    const preferredOrder = ["domain", "first_name", "last_name", "company_name", "linkedin_url", "zi_contact_id"];
+
+    // Combine preferred order with remaining columns
+    const orderedColumns = [
+      ...preferredOrder.filter(col => columnOrder.includes(col)),
+      ...columnOrder.filter(col => !preferredOrder.includes(col)),
+    ];
+
+    // Return unique columns in order
+    return Array.from(new Set(orderedColumns));
   };
 
   // Render data in the order defined by sortedColumn
@@ -77,7 +88,7 @@ const ResultsModal = ({
     const columnOrder = sortedColumn();
     return columnOrder.map((col) => (
       <Td key={col}>
-        {rowData[col] || '-'} {/* Handle missing values */}
+        {rowData[col] !== undefined && rowData[col] !== null ? rowData[col] : '-'} {/* Handle missing values */}
       </Td>
     ));
   };

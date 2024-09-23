@@ -209,8 +209,8 @@ async def process_upload(
     db: Session
 ):  
     filename = file.filename
-    employee_id = employee_id_store.get('employee_id')
-    # employee_id = 'E00860'
+    # employee_id = employee_id_store.get('employee_id')
+    employee_id = 'E00860'
     employee_role_py = employee_role_store.get('employee_role')
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
@@ -249,7 +249,6 @@ async def process_upload(
             conditions.append(f"{clean_website_expr} = :domain")
             params["domain"] = row['domain']
         if match_domain:
-            # conditions.append("\"Website\" = :domain")
             conditions.append(f"{clean_website_expr} = :domain")
             params["domain"] = row['domain']
             conditions.append("LOWER(\"First Name\") = :first_name")
@@ -261,19 +260,14 @@ async def process_upload(
             params["linkedin_url"] = row['linkedin_url']
         if match_zi_contact_id:
             try:
-                # Check if it's already a string
                 if isinstance(row['zi_contact_id'], str):
                     row['zi_contact_id'] = str(row['zi_contact_id'])
                 else:
-                    # Convert to int if it's numeric, then to string
                     row['zi_contact_id'] = str(int(float(row['zi_contact_id'])))
             except ValueError:
-                # Fallback if conversion fails
                 row['zi_contact_id'] = str(row['zi_contact_id'])
-            
             conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
             params["zi_contact_id"] = row['zi_contact_id']
-            
         if not conditions:
             conditions.append("0=1")
 
@@ -284,22 +278,26 @@ async def process_upload(
         SELECT DISTINCT {select_columns} FROM tbl_zoominfo_contact_paid
         WHERE {where_clause}
         """
-        # print({select_columns})
         try:
             result = db.execute(text(query).params(params)).fetchall()
             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
-            for match in result:
-                match_dict = dict(zip(columns, match))
-                # Include the original uploaded data in the result
-                combined_result = {**dict(row), **match_dict}
 
-                # Replace NaN with None for JSON compatibility
+            if result:
+                for match in result:
+                    match_dict = dict(zip(columns, match))
+                    combined_result = {**row.to_dict(), **match_dict}
+                    combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
+                    results.append(combined_result)
+            else:
+                # No match found; include original data with None for selected_columns
+                null_match_dict = {col.strip('"'): None for col in selected_columns.split(',')}
+                combined_result = {**row.to_dict(), **null_match_dict}
                 combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-
                 results.append(combined_result)
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
+
     
     all_columns = set(df.columns) | set(selected_columns)
     missing_columns = all_columns - set(df.columns)
