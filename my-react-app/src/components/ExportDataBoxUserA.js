@@ -547,12 +547,6 @@ const ExportDataBoxUserA = ({
                 <FormControl>
               <VStack align="start">
                 <Checkbox
-                  isChecked={matchContactOnlyDomain}
-                  onChange={() => setMatchContactOnlyDomain(!matchContactOnlyDomain)}
-                >
-                  Match Only Domain
-                </Checkbox>
-                <Checkbox
                   isChecked={matchContactDomain}
                   onChange={() => setMatchContactDomain(!matchContactDomain)}
                 >

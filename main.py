@@ -302,16 +302,22 @@ async def process_upload(
     all_columns = set(df.columns) | set(selected_columns)
     missing_columns = all_columns - set(df.columns)
     if missing_columns:
-        for col in missing_columns:
-            df[col] = None 
-    
+    # Create a DataFrame with missing columns initialized to None
+        missing_df = pd.DataFrame({col: [None] * len(df) for col in missing_columns})
+
+        # Concatenate the missing columns DataFrame with the original DataFrame
+        df = pd.concat([df, missing_df], axis=1)
+        
+        
     if results:
         df_export = pd.DataFrame()
         
 
-        # Assign values to selected columns, set other columns to None
-        for column in selected_columns:
-            df_export[column] = [result.get(column, None) for result in results]
+        # Create a dictionary for all selected columns with their respective values from results
+        column_data = {column: [result.get(column, None) for result in results] for column in selected_columns}
+
+        # Use pd.concat() to add the column data to df_export all at once
+        df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
         
         # Ensure all other columns are set to None
         all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
@@ -332,22 +338,33 @@ async def process_upload(
             excel_cols = ["domain", "first_name", "last_name", "linkedin_url", "zi_contact_id"]
             selected_columns_sorted = excel_cols + final_columns
 
-            df_export['import_time'] = import_time
-            df_export['employee_id'] = employee_id
-            df_export['file_name'] = filename
+            # Create a new DataFrame with all necessary columns at once to avoid fragmentation
+            new_columns = {
+                'import_time': import_time,
+                'employee_id': employee_id,
+                'file_name': filename,
+                'selected_cols': ', '.join(f"\"{col}\"" for col in selected_columns_sorted),
+                'domain': [result.get('domain', None) for result in results],
+                'first_name': [result.get('first_name', None) for result in results],
+                'last_name': [result.get('last_name', None) for result in results],
+                'linkedin_url': [result.get('linkedin_url', None) for result in results],
+                'zi_contact_id': [result.get('zi_contact_id', None) for result in results],
+            }
+
+            # Add process_tag based on conditions
             if set(selected_columns) == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
-                df_export['process_tag'] = 'Export - Email'
+                new_columns['process_tag'] = 'Export - Email'
             elif set(selected_columns) == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
-                df_export['process_tag'] = 'Export - Phone'
+                new_columns['process_tag'] = 'Export - Phone'
             elif employee_role_py == 'user_b':
-                df_export['process_tag'] = 'Export - All'
-            df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in selected_columns_sorted)
-            df_export['domain'] = [result.get('domain', None) for result in results]
-            df_export['first_name'] = [result.get('first_name', None) for result in results]
-            df_export['last_name'] = [result.get('last_name', None) for result in results]
-            df_export['linkedin_url'] = [result.get('linkedin_url', None) for result in results]
-            df_export['zi_contact_id'] = [result.get('zi_contact_id', None) for result in results]
+                new_columns['process_tag'] = 'Export - All'
+
+            # Concatenate the new columns to the original DataFrame
+            df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
+
+            # Export the DataFrame to the database
             df_export.to_sql('tbl_zoominfo_contact_paid_log_records', db.get_bind(), if_exists='append', index=False)
+
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
