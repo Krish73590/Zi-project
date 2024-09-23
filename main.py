@@ -149,6 +149,7 @@ async def upload_file_user_a(
     file: UploadFile = File(...),
     table_type: TableType = Form(...),
     selected_columns: str = Form(''),
+    match_contact_only_domain: bool = Form(False),
     match_contact_domain: bool = Form(False),
     match_company_domain: bool = Form(False),
     match_linkedin_url: bool = Form(False),
@@ -158,7 +159,7 @@ async def upload_file_user_a(
 ):  
     if table_type == TableType.contact:
         return await process_upload(
-            file, selected_columns, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
+            file, selected_columns, match_contact_only_domain, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
         )
     elif table_type == TableType.company:
         return await process_company_upload(
@@ -171,6 +172,7 @@ async def upload_file_user_b(
     file: UploadFile = File(...),
     table_type: TableType = Form(...),
     selected_columns: str = Form(''),
+    match_contact_only_domain: bool = Form(False),
     match_contact_domain: bool = Form(False),
     match_company_domain: bool = Form(False),
     match_linkedin_url: bool = Form(False),
@@ -180,7 +182,7 @@ async def upload_file_user_b(
 ):
     if table_type == TableType.contact:
         return await process_upload(
-            file, selected_columns, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
+            file, selected_columns,match_contact_only_domain, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
         )
     elif table_type == TableType.company:
         return await process_company_upload(
@@ -200,6 +202,7 @@ def clean_url(url):
 async def process_upload(
     file: UploadFile,
     selected_columns: str,
+    match_only_domain: bool,
     match_domain: bool,
     match_linkedin_url: bool,
     match_zi_contact_id: bool,
@@ -216,7 +219,6 @@ async def process_upload(
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
     df['zi_contact_id'] = df['zi_contact_id'].astype(str)
-    print(df.dtypes)
     
     if not all(col in df.columns for col in ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
@@ -241,6 +243,9 @@ async def process_upload(
     for _, row in df.iterrows():
         conditions = []
         params = {}
+        if match_only_domain:
+            conditions.append(f"{clean_website_expr} = :domain")
+            params["domain"] = row['domain']
         if match_domain:
             # conditions.append("\"Website\" = :domain")
             conditions.append(f"{clean_website_expr} = :domain")

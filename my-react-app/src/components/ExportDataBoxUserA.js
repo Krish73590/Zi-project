@@ -62,6 +62,7 @@ const ExportDataBoxUserA = ({
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [unselectAll, setUnselectAll] = useState(false);
+  const [matchContactOnlyDomain, setMatchContactOnlyDomain] = useState(false);
   const [matchContactDomain, setMatchContactDomain] = useState(false);
   const [matchCompanyDomain, setMatchCompanyDomain] = useState(false);
   const [matchLinkedinUrl, setMatchLinkedinUrl] = useState(false);
@@ -135,6 +136,7 @@ const ExportDataBoxUserA = ({
     } else {
       formData.append('selected_columns', Contactcolumns.join(','));
     }
+    formData.append('match_contact_only_domain', matchContactOnlyDomain);
     formData.append('match_contact_domain', matchContactDomain);
     formData.append('match_company_domain', matchCompanyDomain);
     formData.append('match_linkedin_url', matchLinkedinUrl);
@@ -544,6 +546,12 @@ const ExportDataBoxUserA = ({
                 </Box>
                 <FormControl>
               <VStack align="start">
+                <Checkbox
+                  isChecked={matchContactOnlyDomain}
+                  onChange={() => setMatchContactOnlyDomain(!matchContactOnlyDomain)}
+                >
+                  Match Only Domain
+                </Checkbox>
                 <Checkbox
                   isChecked={matchContactDomain}
                   onChange={() => setMatchContactDomain(!matchContactDomain)}
