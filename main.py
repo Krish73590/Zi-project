@@ -220,7 +220,9 @@ async def process_upload(
     df = df.where(pd.notnull(df), None)
     df['zi_contact_id'] = df['zi_contact_id'].astype(str)
     
-    if not all(col in df.columns for col in ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']):
+    # Define mandatory columns
+    required_columns = ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']
+    if not all(col in df.columns for col in required_columns):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
