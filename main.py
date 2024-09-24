@@ -16,6 +16,16 @@ from enum import Enum
 from datetime import date
 from pydantic import EmailStr
 from datetime import datetime
+from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy import Table, MetaData, insert
+from sqlalchemy import create_engine, insert, Table, MetaData
+
+
+import uuid
+from sqlalchemy import Table, Column, String, MetaData, text
+from sqlalchemy.exc import SQLAlchemyError
+
+
 # Database setup
 DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.dbname}"
 engine = create_engine(DATABASE_URL)
@@ -210,6 +220,8 @@ def clean_url(url):
     url = url.replace('www', '')
     return url.strip()
 
+
+    
 async def process_upload(
     file: UploadFile,
     selected_columns: str,
@@ -217,7 +229,7 @@ async def process_upload(
     match_domain: bool,
     match_linkedin_url: bool,
     match_zi_contact_id: bool,
-    db: Session
+    db: Session  # Assuming this is a SQLAlchemy session
 ):  
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
@@ -226,166 +238,188 @@ async def process_upload(
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
-    
+    # Read Excel file into DataFrame
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
     df = df.where(pd.notnull(df), None)
     df['zi_contact_id'] = df['zi_contact_id'].astype(str)
     
     # Define mandatory columns
     required_columns = ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']
+    uploaded_columns = df.columns.tolist()
+
+    
     if not all(col in df.columns for col in required_columns):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
     selected_columns = list(set(selected_columns))
+
     if not selected_columns:
         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
 
-    
-    # print(selected_columns)
-    results = []
-    results_frontend = []
-    import_time = datetime.now()
-    
-    
+    # Clean 'domain' column
     if 'domain' in df.columns:
         df['domain'] = df['domain'].apply(clean_url)
-        
-    clean_website_expr = "REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER (\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')"
-
     
-    for _, row in df.iterrows():
+    # Create unique temporary table name
+    staging_table_name = f'staging_uploaded_data_{uuid.uuid4().hex}'
+
+    # Ensure we use the same connection throughout
+    # Get the raw connection from the session
+    connection = db.connection()
+
+    # Include all columns from the uploaded Excel file in the staging table
+    metadata = MetaData()
+    staging_table_columns = [Column(col, String) for col in df.columns]
+    staging_table = Table(
+        staging_table_name, metadata,
+        *staging_table_columns,
+        prefixes=['TEMPORARY']  # Specify that this is a temporary table
+    )
+    try:
+        # Create the temporary table
+        staging_table.create(bind=connection)
+
+        # Insert data into the temporary table using the same connection
+        df.to_sql(staging_table_name, connection, if_exists='append', index=False)
+
+        # Build query to join temporary table with target table
         conditions = []
-        params = {}
         if match_only_domain:
-            conditions.append(f"{clean_website_expr} = :domain")
-            params["domain"] = row['domain']
+            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
         if match_domain:
-            conditions.append(f"{clean_website_expr} = :domain")
-            params["domain"] = row['domain']
-            conditions.append("LOWER(\"First Name\") = :first_name")
-            params["first_name"] = row['first_name'].lower() if row['first_name'] is not None else None
-            conditions.append("LOWER(\"Last Name\") = :last_name")
-            params["last_name"] = row['last_name'].lower() if row['last_name'] is not None else None
+            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
+            conditions.append("LOWER(main.\"First Name\") = LOWER(staging.first_name)")
+            conditions.append("LOWER(main.\"Last Name\") = LOWER(staging.last_name)")
         if match_linkedin_url:
-            conditions.append("\"LinkedIn Contact Profile URL\" = :linkedin_url")
-            params["linkedin_url"] = row['linkedin_url']
+            conditions.append("main.\"LinkedIn Contact Profile URL\" = staging.linkedin_url")
         if match_zi_contact_id:
-            try:
-                if isinstance(row['zi_contact_id'], str):
-                    row['zi_contact_id'] = str(row['zi_contact_id'])
-                else:
-                    row['zi_contact_id'] = str(int(float(row['zi_contact_id'])))
-            except ValueError:
-                row['zi_contact_id'] = str(row['zi_contact_id'])
-            conditions.append("\"ZoomInfo Contact ID\" = :zi_contact_id")
-            params["zi_contact_id"] = row['zi_contact_id']
+            conditions.append("main.\"ZoomInfo Contact ID\" = staging.zi_contact_id")
         if not conditions:
             conditions.append("0=1")
-
+        
         where_clause = " AND ".join(conditions)
-        select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
-
-        query = f"""
-        SELECT DISTINCT {select_columns} FROM tbl_zoominfo_contact_paid
-        WHERE {where_clause}
+        
+        # Get the ordered columns from the database table
+        db_columns_query = """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tbl_zoominfo_contact_paid'
+        ORDER BY ordinal_position
         """
-        try:
-            result = db.execute(text(query).params(params)).fetchall()
-            columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
+        ordered_columns = [row[0] for row in connection.execute(text(db_columns_query))]
+        
+        selected_columns_clean = [col.strip('"') for col in selected_columns]
 
-            if result:
-                for match in result:
-                    match_dict = dict(zip(columns, match))
-                    combined_result = {**row.to_dict(), **match_dict}
-                    combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-                    results_frontend.append(combined_result)
-                    results.append(combined_result)
-            else:
-                # No match found; include original data with None for selected_columns
-                null_match_dict = {col.strip('"'): None for col in selected_columns.split(',')}
-                combined_result = {**row.to_dict(), **null_match_dict}
-                combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-                results_frontend.append(combined_result)               
+        # Filter selected_columns to match the order in the table
+        selected_columns_ordered = [col for col in ordered_columns if col in selected_columns_clean]
+
+        # Qualify selected columns with 'main' alias
+        select_columns = ', '.join(f"main.\"{col}\"" for col in selected_columns_ordered) or '*'
+
+        # Select all columns from the staging table for the frontend
+        staging_columns = ', '.join(f"staging.{col} AS {col}" for col in df.columns)
+        
+        query = f"""
+        SELECT DISTINCT {staging_columns}, {select_columns}
+        FROM tbl_zoominfo_contact_paid AS main
+        INNER JOIN {staging_table_name} staging ON {where_clause}
+        """
+        
+
+        result_frontend = connection.execute(text(query))
+
+        # Process the results
+        results = [dict(row._mapping) for row in result_frontend]
+        
+        for result in results:
+            if result.get('zi_contact_id') == 'nan':
+                result['zi_contact_id'] = None
+
+        if results:
+            import_time = datetime.now()
+            # Process results
+            df_export = pd.DataFrame()
+            
+            new_cols = required_columns + selected_columns_ordered
+
+            # Create a dictionary for all selected columns with their respective values from results
+            column_data = {column: [result.get(column, None) for result in results] for column in new_cols}
+
+            # Use pd.concat() to add the column data to df_export all at once
+            df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
+            # print(df_export.head())
+            # Ensure all other columns are set to None
+            all_possible_columns = set(result_frontend.keys())
+            
+            other_columns = all_possible_columns - set(new_cols)
+            for column in other_columns:
+                df_export[column] = None
+
+            try:
+                # Query to fetch the column names from the target table
+                db_columns_query = """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'tbl_zoominfo_contact_paid_log_records'
+                ORDER BY ordinal_position
+                """
+                ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
+
+                # Sort selected_columns based on the database order
+                final_columns =  ', '.join(f"\"{col}\"" for col in selected_columns_ordered) or '*'
+                excel_cols = '"domain", "first_name", "last_name", "linkedin_url", "zi_contact_id"'
+
+                selected_columns_sorted = excel_cols + ', ' + final_columns
                 
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            return JSONResponse(content={"error": str(e)}, status_code=500)
+                num_rows = df_export.shape[0]
+                # Create a new DataFrame with all necessary columns at once to avoid fragmentation
+                new_columns = {
+                    'import_time': [import_time] * num_rows,  # Repeat the scalar value for all rows
+                    'employee_id': [employee_id] * num_rows,  # Repeat the scalar value for all rows
+                    'file_name': [filename] * num_rows,       # Repeat the scalar value for all rows
+                    'selected_cols': [selected_columns_sorted] * num_rows  # Repeat the scalar value for all rows
+                }
 
+                # Add process_tag based on conditions
+                if set(selected_columns) == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
+                    new_columns['process_tag'] = ['Export - Email'] * num_rows
+                elif set(selected_columns) == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
+                    new_columns['process_tag'] = ['Export - Phone'] * num_rows
+                elif employee_role_py == 'user_b':
+                    new_columns['process_tag'] = ['Export - All'] * num_rows
+                else:
+                    new_columns['process_tag'] = ['Export - Selective'] * num_rows
+
+                # Concatenate the new columns to the original DataFrame
+                df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
+                
+                insert_cols = new_cols + ['import_time','employee_id','file_name','selected_cols','process_tag']
+                
+                filtered_insert_cols = [col for col in insert_cols if col in df_export.columns]
+
+                df_filtered = df_export[filtered_insert_cols]
+                
+            
+                df_filtered.to_sql(
+                    'tbl_zoominfo_contact_paid_log_records',
+                    db.get_bind(),
+                    if_exists='append',
+                    index=False,
+                    method='multi',
+                    chunksize=300 # Adjust as needed
+                )
+            except Exception as e:
+                print(f"An error occurred while inserting export records: {e}")
+                return JSONResponse(content={"error": str(e)}, status_code=500)
+    except SQLAlchemyError as e:
+        # print(f"An error occurred: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
     
-    all_columns = set(df.columns) | set(selected_columns)
-    missing_columns = all_columns - set(df.columns)
-    if missing_columns:
-    # Create a DataFrame with missing columns initialized to None
-        missing_df = pd.DataFrame({col: [None] * len(df) for col in missing_columns})
+    finally:
+        # No need to drop the temporary table; it will be dropped automatically
+        pass
 
-        # Concatenate the missing columns DataFrame with the original DataFrame
-        df = pd.concat([df, missing_df], axis=1)
-        
-        
-    if results:
-        df_export = pd.DataFrame()
-        
-
-        # Create a dictionary for all selected columns with their respective values from results
-        column_data = {column: [result.get(column, None) for result in results] for column in selected_columns}
-
-        # Use pd.concat() to add the column data to df_export all at once
-        df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
-        
-        # Ensure all other columns are set to None
-        all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
-        
-        other_columns = all_possible_columns - set(selected_columns)
-        for column in other_columns:
-            df_export[column] = None
-
-        try:
-            db_columns_query = f"""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'tbl_zoominfo_contact_paid'
-            ORDER BY ordinal_position
-            """
-            ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
-            # Sort selected_columns based on the database order
-            final_columns = [col for col in ordered_columns if col in selected_columns]
-            excel_cols = ["domain", "first_name", "last_name", "linkedin_url", "zi_contact_id"]
-            selected_columns_sorted = excel_cols + final_columns
-
-            # Create a new DataFrame with all necessary columns at once to avoid fragmentation
-            new_columns = {
-                'import_time': import_time,
-                'employee_id': employee_id,
-                'file_name': filename,
-                'selected_cols': ', '.join(f"\"{col}\"" for col in selected_columns_sorted),
-                'domain': [val if pd.notna(val) else None for val in (result.get('domain', None) for result in results)],
-                'first_name': [val if pd.notna(val) else None for val in (result.get('first_name', None) for result in results)],
-                'last_name': [val if pd.notna(val) else None for val in (result.get('last_name', None) for result in results)],
-                'linkedin_url': [val if pd.notna(val) else None for val in (result.get('linkedin_url', None) for result in results)],
-                'zi_contact_id': [
-                    val if pd.notna(val) and val != 'nan' else None
-                    for val in (result.get('zi_contact_id', None) for result in results)
-                ],
-            }
-
-            # Add process_tag based on conditions
-            if set(selected_columns) == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
-                new_columns['process_tag'] = 'Export - Email'
-            elif set(selected_columns) == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
-                new_columns['process_tag'] = 'Export - Phone'
-            elif employee_role_py == 'user_b':
-                new_columns['process_tag'] = 'Export - All'
-
-            # Concatenate the new columns to the original DataFrame
-            df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
-            # Export the DataFrame to the database
-            df_export.to_sql('tbl_zoominfo_contact_paid_log_records', db.get_bind(), if_exists='append', index=False)
-
-        except Exception as e:
-            print(f"An error occurred while inserting export records: {e}")
-            return JSONResponse(content={"error": str(e)}, status_code=500)
-    
-    cleaned_results = clean_data(results_frontend)
+    # Clean results for frontend
+    cleaned_results = clean_data(results)
     return {"matches": cleaned_results}
 
 
@@ -399,135 +433,164 @@ async def process_company_upload(
 ):
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
-    # employee_id = 'E00860'
+    employee_role_py = employee_role_store.get('employee_role')
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
     
+    # Read Excel file into DataFrame
     df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
- 
     df = df.where(pd.notnull(df), None)
-
+    
     # Define mandatory columns
     required_columns = ['domain', 'company_name']
     if not all(col in df.columns for col in required_columns):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
+    selected_columns = list(set(selected_columns))
     if not selected_columns:
         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
-            
-    results = []
-    results_frontend = []
-    import_time = datetime.now()
     
+    # Clean 'domain' column
     if 'domain' in df.columns:
         df['domain'] = df['domain'].apply(clean_url)
-        
-    clean_website_expr = "REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER (\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')"
+    
+    # Create unique temporary table name
+    staging_table_name = f'staging_uploaded_company_data_{uuid.uuid4().hex}'
 
+    # Ensure we use the same connection throughout
+    connection = db.connection()
 
-    for _, row in df.iterrows():
+    # Include all columns from the uploaded Excel file in the staging table
+    metadata = MetaData()
+    staging_table_columns = [Column(col, String) for col in df.columns]
+    staging_table = Table(
+        staging_table_name, metadata,
+        *staging_table_columns,
+        prefixes=['TEMPORARY']  # Specify that this is a temporary table
+    )
+    try:
+        # Create the temporary table
+        staging_table.create(bind=connection)
+
+        # Insert data into the temporary table using the same connection
+        df.to_sql(staging_table_name, connection, if_exists='append', index=False)
+
+        # Build query to join temporary table with target table
         conditions = []
-        params = {}
         if match_domain:
-            conditions.append(f"{clean_website_expr} = :domain")
-            params["domain"] = row['domain']
+            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
         if match_company_name:
-            conditions.append("LOWER(\"Company Name\") = :company_name")
-            params["company_name"] = row['company_name'].lower() if row['company_name'] is not None else None
-            
+            conditions.append("LOWER(main.\"Company Name\") = LOWER(staging.company_name)")
         if not conditions:
             conditions.append("0=1")
 
         where_clause = " AND ".join(conditions)
-        select_columns = ', '.join(f"\"{col}\"" for col in selected_columns) or '*'
+        
+         # Get the ordered columns from the database table
+        db_columns_query = """
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'tbl_zoominfo_company_paid'
+        ORDER BY ordinal_position
+        """
+        ordered_columns = [row[0] for row in connection.execute(text(db_columns_query))]
+        
+        selected_columns_clean = [col.strip('"') for col in selected_columns]
+
+        # Filter selected_columns to match the order in the table
+        selected_columns_ordered = [col for col in ordered_columns if col in selected_columns_clean]
+        # Qualify selected columns with 'main' alias
+        select_columns = ', '.join(f"main.\"{col}\"" for col in selected_columns_ordered) or '*'
+
+        # Select all columns from the staging table for the frontend
+        staging_columns = ', '.join(f"staging.{col} AS input_{col}" for col in df.columns)
 
         query = f"""
-        SELECT DISTINCT {select_columns} FROM tbl_zoominfo_company_paid
-        WHERE {where_clause}
+        SELECT DISTINCT {select_columns}, {staging_columns}
+        FROM tbl_zoominfo_company_paid AS main
+        INNER JOIN {staging_table_name} staging ON {where_clause}
         """
-        
-        try:
-            result = db.execute(text(query).params(params)).fetchall()
-            columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
+        # Execute the query and get the Result object
+        result_frontend = connection.execute(text(query))
 
-            if result:
-                for match in result:
-                    match_dict = dict(zip(columns, match))
-                    combined_result = {**row.to_dict(), **match_dict}
-                    combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-                    results_frontend.append(combined_result)
-                    results.append(combined_result)
-            else:
-                # No match found; include original data with None for selected_columns
-                null_match_dict = {col.strip('"'): None for col in selected_columns.split(',')}
-                combined_result = {**row.to_dict(), **null_match_dict}
-                combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-                results_frontend.append(combined_result)    
+        # Process the results
+        results = [dict(row._mapping) for row in result_frontend]
+
+        # Process results for backend logging
+        if results:
+            import_time = datetime.now()
+            new_cols = required_columns + selected_columns_ordered
+            
+            # Create a dictionary for all selected columns with their respective values from results
+            column_data = {column: [result.get(column, None) for result in results] for column in new_cols}
+            
+            # Use pd.concat() to add the column data to df_export all at once
+            df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
+            # print(df_export.head())
+            # Ensure all other columns are set to None
+            all_possible_columns = set(result_frontend.keys())
+            
+            other_columns = all_possible_columns - set(new_cols)
+            for column in other_columns:
+                df_export[column] = None
+            
+            try:
+                # Query to fetch the column names from the target table
+                db_columns_query = """
+                SELECT column_name FROM information_schema.columns
+                WHERE table_name = 'tbl_zoominfo_contact_paid_log_records'
+                ORDER BY ordinal_position
+                """
+                ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
+
+                # Sort selected_columns based on the database order
+                final_columns =  ', '.join(f"\"{col}\"" for col in selected_columns_ordered) or '*'
+                excel_cols = '"domain", "company_name"'
                 
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            return JSONResponse(content={"error": str(e)}, status_code=500)
-        
-    all_columns = set(df.columns) | set(selected_columns)
-    missing_columns = all_columns - set(df.columns)
-    if missing_columns:
-    # Create a DataFrame with missing columns initialized to None
-        missing_df = pd.DataFrame({col: [None] * len(df) for col in missing_columns})
+                selected_columns_sorted = excel_cols + ', ' + final_columns
+                num_rows = df_export.shape[0]
+                # Create a new DataFrame with all necessary columns at once to avoid fragmentation
+                new_columns = {
+                    'import_time': [import_time] * num_rows,  # Repeat the scalar value for all rows
+                    'employee_id': [employee_id] * num_rows,  # Repeat the scalar value for all rows
+                    'file_name': [filename] * num_rows,       # Repeat the scalar value for all rows
+                    'selected_cols': selected_columns_sorted * num_rows,
+                }
+                
+                if employee_role_py == 'user_a':
+                    new_columns['process_tag'] = ['Export - Selective'] * num_rows
+                else:
+                    new_columns['process_tag'] = ['Export - All'] * num_rows
 
-        # Concatenate the missing columns DataFrame with the original DataFrame
-        df = pd.concat([df, missing_df], axis=1)
+                df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
+
+                insert_cols = new_cols + ['import_time','employee_id','file_name','selected_cols','process_tag']
+                
+                filtered_insert_cols = [col for col in insert_cols if col in df_export.columns]
+
+                df_filtered = df_export[filtered_insert_cols]
+                
+                df_filtered.to_sql(
+                    'tbl_zoominfo_company_paid_log_records',
+                    db.get_bind(),
+                    if_exists='append',
+                    index=False,
+                    method='multi',
+                    chunksize=300 # Adjust as needed
+                )
+            except Exception as e:
+                print(f"An error occurred while inserting export records: {e}")
+                return JSONResponse(content={"error": str(e)}, status_code=500)
     
-    if results:
-        df_export = pd.DataFrame()
-        
+    except SQLAlchemyError as e:
+        # print(f"An error occurred: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+    finally:
+        # No need to drop the temporary table; it will be dropped automatically
+        pass
 
-        # Create a dictionary for all selected columns with their respective values from results
-        column_data = {column: [result.get(column, None) for result in results] for column in selected_columns}
-
-        # Use pd.concat() to add the column data to df_export all at once
-        df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
-        
-        # Ensure all other columns are set to None
-        all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
-        
-        other_columns = all_possible_columns - set(selected_columns)
-        for column in other_columns:
-            df_export[column] = None
-
-        try:
-            db_columns_query = f"""
-            SELECT column_name FROM information_schema.columns
-            WHERE table_name = 'tbl_zoominfo_company_paid'
-            ORDER BY ordinal_position
-            """
-            ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
-
-            # Sort selected_columns based on the database order
-            final_columns = [col for col in ordered_columns if col in selected_columns]
-            excel_cols = ["domain", "company_name"]
-            
-            selected_columns_sorted  = excel_cols + final_columns
-            
-            # Create a new DataFrame with all necessary columns at once to avoid fragmentation
-            new_columns = {
-                'import_time': import_time,
-                'employee_id': employee_id,
-                'file_name': filename,
-                'process_tag': 'Export - All',
-                'selected_cols': ', '.join(f"\"{col}\"" for col in selected_columns_sorted),
-                'domain': [val if pd.notna(val) else None for val in (result.get('domain', None) for result in results)],
-                'company_name': [val if pd.notna(val) else None for val in (result.get('company_name', None) for result in results)],
-            }
-            
-            df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
-
-            df_export.to_sql('tbl_zoominfo_company_paid_log_records', db.get_bind(), if_exists='append', index=False)
-        except Exception as e:
-            print(f"An error occurred while inserting export records: {e}")
-            return JSONResponse(content={"error": str(e)}, status_code=500)
-           
-    cleaned_results = clean_data(results_frontend)
+    # Clean results for frontend
+    cleaned_results = clean_data(results)
     return {"matches": cleaned_results}
 
 
@@ -589,7 +652,7 @@ async def import_data(
             columns = ', '.join(f'"{col}"' for col in data.columns if col != 'tbl_zoominfo_company_paid_id')
             # print(columns)
             placeholders = ', '.join(['%s'] * (len(data.columns)))
-            print(placeholders)
+            # print(placeholders)
             insert_query = f"""
                 INSERT INTO {table_name} ({columns})
                 VALUES ({placeholders})
