@@ -188,7 +188,18 @@ async def upload_file_user_b(
         return await process_company_upload(
             file, selected_columns, match_company_domain, match_company_name, db
         )
+import math
 
+def clean_data(data):
+    if isinstance(data, dict):
+        return {k: clean_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_data(item) for item in data]
+    elif data is None or (isinstance(data, float) and math.isnan(data)) or (isinstance(data, str) and data.lower() == 'nan'):
+        return ''
+    else:
+        return data
+    
 def clean_url(url):
     if pd.isna(url):
         return url
@@ -209,8 +220,8 @@ async def process_upload(
     db: Session
 ):  
     filename = file.filename
-    # employee_id = employee_id_store.get('employee_id')
-    employee_id = 'E00860'
+    employee_id = employee_id_store.get('employee_id')
+    # employee_id = 'E00860'
     employee_role_py = employee_role_store.get('employee_role')
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
@@ -233,6 +244,7 @@ async def process_upload(
     
     # print(selected_columns)
     results = []
+    results_frontend = []
     import_time = datetime.now()
     
     
@@ -287,13 +299,15 @@ async def process_upload(
                     match_dict = dict(zip(columns, match))
                     combined_result = {**row.to_dict(), **match_dict}
                     combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
+                    results_frontend.append(combined_result)
                     results.append(combined_result)
             else:
                 # No match found; include original data with None for selected_columns
                 null_match_dict = {col.strip('"'): None for col in selected_columns.split(',')}
                 combined_result = {**row.to_dict(), **null_match_dict}
                 combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-                results.append(combined_result)
+                results_frontend.append(combined_result)               
+                
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -344,11 +358,14 @@ async def process_upload(
                 'employee_id': employee_id,
                 'file_name': filename,
                 'selected_cols': ', '.join(f"\"{col}\"" for col in selected_columns_sorted),
-                'domain': [result.get('domain', None) for result in results],
-                'first_name': [result.get('first_name', None) for result in results],
-                'last_name': [result.get('last_name', None) for result in results],
-                'linkedin_url': [result.get('linkedin_url', None) for result in results],
-                'zi_contact_id': [result.get('zi_contact_id', None) for result in results],
+                'domain': [val if pd.notna(val) else None for val in (result.get('domain', None) for result in results)],
+                'first_name': [val if pd.notna(val) else None for val in (result.get('first_name', None) for result in results)],
+                'last_name': [val if pd.notna(val) else None for val in (result.get('last_name', None) for result in results)],
+                'linkedin_url': [val if pd.notna(val) else None for val in (result.get('linkedin_url', None) for result in results)],
+                'zi_contact_id': [
+                    val if pd.notna(val) and val != 'nan' else None
+                    for val in (result.get('zi_contact_id', None) for result in results)
+                ],
             }
 
             # Add process_tag based on conditions
@@ -361,14 +378,15 @@ async def process_upload(
 
             # Concatenate the new columns to the original DataFrame
             df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
-
             # Export the DataFrame to the database
             df_export.to_sql('tbl_zoominfo_contact_paid_log_records', db.get_bind(), if_exists='append', index=False)
 
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
-    return {"matches": results}
+    
+    cleaned_results = clean_data(results_frontend)
+    return {"matches": cleaned_results}
 
 
 
@@ -389,7 +407,9 @@ async def process_company_upload(
  
     df = df.where(pd.notnull(df), None)
 
-    if not all(col in df.columns for col in ['domain', 'company_name']):
+    # Define mandatory columns
+    required_columns = ['domain', 'company_name']
+    if not all(col in df.columns for col in required_columns):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
@@ -397,6 +417,7 @@ async def process_company_upload(
         return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
             
     results = []
+    results_frontend = []
     import_time = datetime.now()
     
     if 'domain' in df.columns:
@@ -429,14 +450,21 @@ async def process_company_upload(
         try:
             result = db.execute(text(query).params(params)).fetchall()
             columns = [desc[0] for desc in db.execute(text(query).params(params)).cursor.description]
-            for match in result:
-                match_dict = dict(zip(columns, match))
-                combined_result = {**dict(row), **match_dict}
 
-                # Replace NaN with None for JSON compatibility
+            if result:
+                for match in result:
+                    match_dict = dict(zip(columns, match))
+                    combined_result = {**row.to_dict(), **match_dict}
+                    combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
+                    results_frontend.append(combined_result)
+                    results.append(combined_result)
+            else:
+                # No match found; include original data with None for selected_columns
+                null_match_dict = {col.strip('"'): None for col in selected_columns.split(',')}
+                combined_result = {**row.to_dict(), **null_match_dict}
                 combined_result = {k: (None if pd.isna(v) else v) for k, v in combined_result.items()}
-
-                results.append(combined_result)
+                results_frontend.append(combined_result)    
+                
         except Exception as e:
             print(f"An error occurred: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -444,16 +472,21 @@ async def process_company_upload(
     all_columns = set(df.columns) | set(selected_columns)
     missing_columns = all_columns - set(df.columns)
     if missing_columns:
-        for col in missing_columns:
-            df[col] = None
+    # Create a DataFrame with missing columns initialized to None
+        missing_df = pd.DataFrame({col: [None] * len(df) for col in missing_columns})
+
+        # Concatenate the missing columns DataFrame with the original DataFrame
+        df = pd.concat([df, missing_df], axis=1)
     
     if results:
         df_export = pd.DataFrame()
         
 
-        # Assign values to selected columns, set other columns to None
-        for column in selected_columns:
-            df_export[column] = [result.get(column, None) for result in results]
+        # Create a dictionary for all selected columns with their respective values from results
+        column_data = {column: [result.get(column, None) for result in results] for column in selected_columns}
+
+        # Use pd.concat() to add the column data to df_export all at once
+        df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
         
         # Ensure all other columns are set to None
         all_possible_columns = set([desc[0] for desc in db.execute(text(query).params(params)).cursor.description])
@@ -476,19 +509,26 @@ async def process_company_upload(
             
             selected_columns_sorted  = excel_cols + final_columns
             
-            df_export['import_time'] = import_time
-            df_export['employee_id'] = employee_id
-            df_export['file_name'] = filename
-            df_export['process_tag'] = 'Export - All'
-            df_export['selected_cols'] = ', '.join(f"\"{col}\"" for col in selected_columns_sorted)
-            df_export['domain'] = [result.get('domain', None) for result in results]
-            df_export['company_name'] = [result.get('company_name', None) for result in results]
+            # Create a new DataFrame with all necessary columns at once to avoid fragmentation
+            new_columns = {
+                'import_time': import_time,
+                'employee_id': employee_id,
+                'file_name': filename,
+                'process_tag': 'Export - All',
+                'selected_cols': ', '.join(f"\"{col}\"" for col in selected_columns_sorted),
+                'domain': [val if pd.notna(val) else None for val in (result.get('domain', None) for result in results)],
+                'company_name': [val if pd.notna(val) else None for val in (result.get('company_name', None) for result in results)],
+            }
+            
+            df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
+
             df_export.to_sql('tbl_zoominfo_company_paid_log_records', db.get_bind(), if_exists='append', index=False)
         except Exception as e:
             print(f"An error occurred while inserting export records: {e}")
             return JSONResponse(content={"error": str(e)}, status_code=500)
            
-    return {"matches": results}
+    cleaned_results = clean_data(results_frontend)
+    return {"matches": cleaned_results}
 
 
 @app.post("/import/")
