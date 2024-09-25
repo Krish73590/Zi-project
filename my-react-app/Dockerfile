@@ -1,7 +1,7 @@
 # Dockerfile for React Frontend
 
 # # Step 1: Build the React app
-FROM node:18 AS build
+FROM node:18-alpine AS build
 
 # Set the working directory
 WORKDIR /my-react-app

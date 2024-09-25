@@ -286,15 +286,15 @@ async def process_upload(
         # Build query to join temporary table with target table
         conditions = []
         if match_only_domain:
-            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
+            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(staging.domain),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')")
         if match_domain:
-            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
-            conditions.append("LOWER(main.\"First Name\") = LOWER(staging.first_name)")
-            conditions.append("LOWER(main.\"Last Name\") = LOWER(staging.last_name)")
+            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(staging.domain),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')")
+            conditions.append("TRIM(LOWER(REPLACE(main.\"First Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.first_name,'''',' ')))")
+            conditions.append("TRIM(LOWER(REPLACE(main.\"Last Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.last_name,'''',' ')))")
         if match_linkedin_url:
-            conditions.append("main.\"LinkedIn Contact Profile URL\" = staging.linkedin_url")
+            conditions.append("TRIM(main.\"LinkedIn Contact Profile URL\") = TRIM(staging.linkedin_url)")
         if match_zi_contact_id:
-            conditions.append("main.\"ZoomInfo Contact ID\" = staging.zi_contact_id")
+            conditions.append("TRIM(main.\"ZoomInfo Contact ID\") = TRIM(staging.zi_contact_id)")
         if not conditions:
             conditions.append("0=1")
         
@@ -317,14 +317,14 @@ async def process_upload(
         select_columns = ', '.join(f"main.\"{col}\"" for col in selected_columns_ordered) or '*'
 
         # Select all columns from the staging table for the frontend
-        staging_columns = ', '.join(f"staging.{col} AS {col}" for col in df.columns)
+        staging_columns = ', '.join(f"staging.\"{col}\" AS \"{col}\" " for col in df.columns)
         
         query = f"""
         SELECT DISTINCT {staging_columns}, {select_columns}
         FROM tbl_zoominfo_contact_paid AS main
         INNER JOIN {staging_table_name} staging ON {where_clause}
         """
-        
+        # print(query)
 
         result_frontend = connection.execute(text(query))
 
@@ -481,12 +481,12 @@ async def process_company_upload(
         if match_domain:
             conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
         if match_company_name:
-            conditions.append("LOWER(main.\"Company Name\") = LOWER(staging.company_name)")
+            conditions.append("TRIM(LOWER(REPLACE(main.\"Company Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.company_name,'''',' ')))")
         if not conditions:
             conditions.append("0=1")
 
         where_clause = " AND ".join(conditions)
-        
+        # print(where_clause)
          # Get the ordered columns from the database table
         db_columns_query = """
         SELECT column_name FROM information_schema.columns
@@ -503,13 +503,15 @@ async def process_company_upload(
         select_columns = ', '.join(f"main.\"{col}\"" for col in selected_columns_ordered) or '*'
 
         # Select all columns from the staging table for the frontend
-        staging_columns = ', '.join(f"staging.{col} AS input_{col}" for col in df.columns)
+        staging_columns = ', '.join(f""" staging.\"{col}\" AS \"{col}\" """ for col in df.columns)
 
         query = f"""
         SELECT DISTINCT {select_columns}, {staging_columns}
         FROM tbl_zoominfo_company_paid AS main
         INNER JOIN {staging_table_name} staging ON {where_clause}
         """
+        
+        # print(query)
         # Execute the query and get the Result object
         result_frontend = connection.execute(text(query))
 
@@ -519,6 +521,9 @@ async def process_company_upload(
         # Process results for backend logging
         if results:
             import_time = datetime.now()
+            
+            df_export = pd.DataFrame()
+            
             new_cols = required_columns + selected_columns_ordered
             
             # Create a dictionary for all selected columns with their respective values from results
@@ -538,7 +543,7 @@ async def process_company_upload(
                 # Query to fetch the column names from the target table
                 db_columns_query = """
                 SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'tbl_zoominfo_contact_paid_log_records'
+                WHERE table_name = 'tbl_zoominfo_company_paid_log_records'
                 ORDER BY ordinal_position
                 """
                 ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
@@ -567,9 +572,12 @@ async def process_company_upload(
                 insert_cols = new_cols + ['import_time','employee_id','file_name','selected_cols','process_tag']
                 
                 filtered_insert_cols = [col for col in insert_cols if col in df_export.columns]
+                filtered_insert_cols = list(set(filtered_insert_cols))
+
 
                 df_filtered = df_export[filtered_insert_cols]
-                
+                # print(df_filtered.columns)
+
                 df_filtered.to_sql(
                     'tbl_zoominfo_company_paid_log_records',
                     db.get_bind(),
