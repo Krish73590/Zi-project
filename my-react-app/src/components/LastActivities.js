@@ -71,7 +71,8 @@ const LastActivities = ({
       </Tabs>
       <Box
         maxHeight="500px"
-        maxWidth="1400px"
+        // maxWidth="1400px"
+        w = "100%"
         overflowY="auto"
         overflowX="auto"
         mt={7}
@@ -87,7 +88,7 @@ const LastActivities = ({
           <Thead position="sticky" top="0" bg="gray.100" zIndex="1">
             <Tr>
               <Th>Employee ID</Th>
-              <Th>Import Time</Th>
+              <Th>Process Time</Th>
               <Th>File Name</Th>
               <Th>Process Tag</Th>
               <Th>Counts</Th>
@@ -96,9 +97,9 @@ const LastActivities = ({
           </Thead>
           <Tbody>
             {activities.map((activity) => (
-              <Tr key={activity.import_time}>
+              <Tr key={activity.process_time}>
                 <Td>{activity.employee_id}</Td>
-                <Td>{activity.import_time}</Td>
+                <Td>{activity.process_time}</Td>
                 <Td>{activity.file_name}</Td>
                 <Td>{activity.process_tag}</Td>
                 <Td>{activity.cnt}</Td>
@@ -115,6 +116,7 @@ const LastActivities = ({
                     py={3}
                     maxW="250"
                     onClick={() => handlelogExport(activity)}
+                    // onClick={() => handlelogExport(activity)}
                   >
                     Download
                   </Button>

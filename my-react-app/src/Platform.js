@@ -71,10 +71,10 @@ const Platform = () => {
 
   
   useEffect(() => {
-    console.log(`Fetching data for tableType: ${logtableType}`);
+    // console.log(`Fetching data for tableType: ${logtableType}`);
     axios.get(`${process.env.REACT_APP_API_URL}/user/last-activities/?table_type=${logtableType}`)
       .then(response => {
-        console.log('Data fetched:', response.data);
+        // console.log('Data fetched:', response.data);
         setActivities(response.data);
       })
       .catch(error => {
@@ -84,17 +84,12 @@ const Platform = () => {
 
   const handlelogExport = async (activity) => {
     try {
-      const response = await axios.get(`${process.env.REACT_APP_API_URL}/user/download-activity/`, {
-        params: {
-          employee_id: activity.employee_id,
-          import_time: activity.import_time,
-          table_type: logtableType // Adjust as needed
-        }
-      });
-
+      // const processTimeStr = activity.process_time.toString();
+      const response = await axios.get(`${process.env.REACT_APP_API_URL}${activity.download_link}`);
+      // console.log(response)
       // Convert response data to XLSX
-      const data = response.data.results; // Data from API
-
+      const data = response.data; // Data from API
+      // console.log(data)
       // Create a workbook and add a worksheet
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
@@ -103,10 +98,36 @@ const Platform = () => {
 
       // Create a blob and save it
       const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `${activity.file_name.replace('.xlsx', '').replace('.csv', '')}_${activity.import_time}.xlsx`);
+      saveAs(blob, `${activity.file_name.replace('.xlsx', '').replace('.csv', '')}_${activity.process_time.toString()}.xlsx`);
 
     } catch (error) {
       console.error('Error downloading the data:', error);
+      // Display error to the user
+      if (error.response) {
+        toast({
+          title: 'Download Error',
+          description: error.response.data.error || 'Failed to download data.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else if (error.request) {
+        toast({
+          title: 'Network Error',
+          description: 'No response from the server. Please check your connection.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'An unexpected error occurred while downloading data.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
     }
   };
 
@@ -155,13 +176,32 @@ const Platform = () => {
       });
     } catch (error) {
       console.error('Error importing data:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to import data.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
+      // Extract and display specific error messages
+      if (error.response) {
+        toast({
+          title: 'Import Error',
+          description: error.response.data.error || 'Failed to import data.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else if (error.request) {
+        toast({
+          title: 'Network Error',
+          description: 'No response from the server. Please check your connection.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'An unexpected error occurred during data import.',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      }
     } finally {
       setimportLoading(false);
     }

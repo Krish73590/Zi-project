@@ -62,7 +62,7 @@ const ExportDataBoxUserA = ({
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [unselectAll, setUnselectAll] = useState(false);
-  const [matchContactOnlyDomain, setMatchContactOnlyDomain] = useState(false);
+  const [matchContactOnlyDomain] = useState(false);
   const [matchContactDomain, setMatchContactDomain] = useState(false);
   const [matchCompanyDomain, setMatchCompanyDomain] = useState(false);
   const [matchLinkedinUrl, setMatchLinkedinUrl] = useState(false);
@@ -144,6 +144,8 @@ const ExportDataBoxUserA = ({
     formData.append('match_company_name', matchCompanyName);
 
     setexportLoading(true);
+    const startTime = Date.now();
+
     try {
       const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/user_a`, formData, {
         headers: {
@@ -168,20 +170,40 @@ const ExportDataBoxUserA = ({
       setCurrentPage(1);
       setDisplayedResults(allResults.slice(0, 5));
       onOpen();
-    } catch (error) {
-      console.error('Error uploading file:', error);
+      const endTime = Date.now();
+      const timeTakenSeconds = ((endTime - startTime) / 1000).toFixed(2);
+      // Show success toast with time taken
       toast({
-        title: 'Error',
-        description: 'Failed to upload file.',
-        status: 'error',
+        title: 'Success',
+        description: `File processed successfully in ${timeTakenSeconds} seconds.`,
+        status: 'success',
         duration: 5000,
         isClosable: true,
       });
-    } finally {
-      setexportLoading(false);
-    }
-  };
 
+    } catch (error) {
+      // console.log(error)
+      console.error('Error uploading file:', error);
+    let errorMessage = 'Failed to upload file.';
+
+    if (error.response && error.response.data && error.response.data.error) {
+      errorMessage = error.response.data.error;
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+    const endTime = Date.now();
+    const timeTakenSeconds = ((endTime - startTime) / 1000).toFixed(2);
+    toast({
+      title: 'Error',
+      description: `${errorMessage} (Time taken: ${timeTakenSeconds} seconds)`,
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
+  } finally {
+    setexportLoading(false);
+  }
+};
 
   const handleRemoveColumn = (col) => {
     setSelectedColumns(selectedColumns.filter(column => column !== col));

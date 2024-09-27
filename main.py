@@ -3,11 +3,13 @@ import os
 from fastapi import FastAPI, File, Query, UploadFile, Form, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import psycopg2
-from sqlalchemy import create_engine, text, inspect
+from sqlalchemy import JSON, DateTime, Integer, create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 import pandas as pd
 from io import BytesIO
-import mycred as mc
+
+import uvicorn
+# import mycred as mc
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
@@ -15,22 +17,39 @@ from typing import List, Optional
 from enum import Enum
 from datetime import date
 from pydantic import EmailStr
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy import Table, MetaData, insert
 from sqlalchemy import create_engine, insert, Table, MetaData
-
+import json
+import pytz
+import os
+from dotenv import load_dotenv
+import urllib.parse
 
 import uuid
 from sqlalchemy import Table, Column, String, MetaData, text
 from sqlalchemy.exc import SQLAlchemyError
 
+# Custom JSON encoder to handle datetime objects
+class DateTimeEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()  # Convert datetime to ISO format string
+        return super().default(obj)
+load_dotenv()
+
+dbname=os.getenv('DB_NAME')
+user=os.getenv('DB_USER')
+password=os.getenv('DB_PASSWORD')
+password = urllib.parse.quote_plus(password)
+host=os.getenv('DB_HOST')
+port=os.getenv('DB_PORT')
 
 # Database setup
-DATABASE_URL = f"postgresql://{mc.user}:{mc.password}@{mc.host}:{mc.port}/{mc.dbname}"
+DATABASE_URL = f"postgresql://{user}:{password}@{host}:{port}/{dbname}"
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 UPLOAD_FOLDER = 'uploads/'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -220,8 +239,12 @@ def clean_url(url):
     url = url.replace('www', '')
     return url.strip()
 
+import logging
+# Configure logging
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
-    
+
 async def process_upload(
     file: UploadFile,
     selected_columns: str,
@@ -233,195 +256,192 @@ async def process_upload(
 ):  
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
-    # employee_id = 'E00860'
     employee_role_py = employee_role_store.get('employee_role')
+    
     if not employee_id:
-        return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
+        return JSONResponse(content={"error": "Employee ID not found. Please log in again."}, status_code=400)
 
-    # Read Excel file into DataFrame
-    df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
-    df = df.where(pd.notnull(df), None)
-    df['zi_contact_id'] = df['zi_contact_id'].astype(str)
-    
-    # Define mandatory columns
+    # Step 1: Read and Validate Excel File
+    try:
+        df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+        df = df.where(pd.notnull(df), None)
+        if 'zi_contact_id' in df.columns:
+            df['zi_contact_id'] = df['zi_contact_id'].astype(str)
+    except Exception as e:
+        logger.error(f"Error reading the uploaded file '{filename}': {e}")
+        return JSONResponse(content={"error": "Failed to read the uploaded file. Ensure it is a valid Excel file."}, status_code=400)
+
+    # Step 2: Validate Required Columns
     required_columns = ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']
-    uploaded_columns = df.columns.tolist()
-
+    missing_columns = [col for col in required_columns if col not in df.columns]
     
-    if not all(col in df.columns for col in required_columns):
-        return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
+    if missing_columns:
+        return JSONResponse(
+            content={"error": f"The uploaded file is missing the following required columns: {', '.join(missing_columns)}."},
+            status_code=400
+        )
 
+    # Step 3: Validate Selected Columns
     selected_columns = [col.strip() for col in selected_columns.split(',') if col.strip()]
     selected_columns = list(set(selected_columns))
-
-    if not selected_columns:
-        return JSONResponse(content={"error": "No valid columns selected."}, status_code=400)
-
-    # Clean 'domain' column
-    if 'domain' in df.columns:
-        df['domain'] = df['domain'].apply(clean_url)
     
-    # Create unique temporary table name
+    if not selected_columns:
+        return JSONResponse(content={"error": "No valid columns selected for export."}, status_code=400)
+    
+    # Step 4: Clean 'domain' Column
+    try:
+        if 'domain' in df.columns:
+            df['domain'] = df['domain'].apply(clean_url)
+    except Exception as e:
+        logger.error(f"Error cleaning 'domain' column in file '{filename}': {e}")
+        return JSONResponse(content={"error": "Failed to clean the 'domain' column. Please check the data format."}, status_code=400)
+    
+    # Step 5: Create Temporary Table and Insert Data
     staging_table_name = f'staging_uploaded_data_{uuid.uuid4().hex}'
-
-    # Ensure we use the same connection throughout
-    # Get the raw connection from the session
     connection = db.connection()
-
-    # Include all columns from the uploaded Excel file in the staging table
     metadata = MetaData()
     staging_table_columns = [Column(col, String) for col in df.columns]
     staging_table = Table(
         staging_table_name, metadata,
         *staging_table_columns,
-        prefixes=['TEMPORARY']  # Specify that this is a temporary table
+        prefixes=['TEMPORARY']
     )
+    
     try:
-        # Create the temporary table
         staging_table.create(bind=connection)
-
-        # Insert data into the temporary table using the same connection
+    except SQLAlchemyError as e:
+        logger.error(f"Error creating temporary table '{staging_table_name}': {e}")
+        return JSONResponse(content={"error": "Internal server error while processing the file. Please try again later."}, status_code=500)
+    
+    try:
         df.to_sql(staging_table_name, connection, if_exists='append', index=False)
-
-        # Build query to join temporary table with target table
+    except SQLAlchemyError as e:
+        logger.error(f"Error inserting data into temporary table '{staging_table_name}': {e}")
+        return JSONResponse(content={"error": "Failed to insert data into the temporary table. Please verify the data and try again."}, status_code=400)
+    
+    # Step 6: Build and Execute Join Query
+    try:
         conditions = []
         if match_only_domain:
-            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(staging.domain),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')")
+            conditions.append(f"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(staging.domain),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')")
         if match_domain:
-            conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(staging.domain),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')")
-            conditions.append("TRIM(LOWER(REPLACE(main.\"First Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.first_name,'''',' ')))")
-            conditions.append("TRIM(LOWER(REPLACE(main.\"Last Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.last_name,'''',' ')))")
+            conditions.extend([
+                f"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(staging.domain),'https://',''),'https:/',''),'http://',''),'www.',''),'www','')",
+                "TRIM(LOWER(REPLACE(main.\"First Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.first_name,'''',' ')))",
+                "TRIM(LOWER(REPLACE(main.\"Last Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.last_name,'''',' ')))"
+            ])
         if match_linkedin_url:
             conditions.append("TRIM(main.\"LinkedIn Contact Profile URL\") = TRIM(staging.linkedin_url)")
         if match_zi_contact_id:
             conditions.append("TRIM(main.\"ZoomInfo Contact ID\") = TRIM(staging.zi_contact_id)")
         if not conditions:
-            conditions.append("0=1")
+            conditions.append("0=1")  # No conditions provided
         
         where_clause = " AND ".join(conditions)
         
-        # Get the ordered columns from the database table
+        # Fetch ordered columns from the target table
         db_columns_query = """
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'tbl_zoominfo_contact_paid'
-        ORDER BY ordinal_position
+            SELECT column_name 
+            FROM information_schema.columns
+            WHERE table_name = 'tbl_zoominfo_contact_paid'
+            ORDER BY ordinal_position
         """
         ordered_columns = [row[0] for row in connection.execute(text(db_columns_query))]
-        
         selected_columns_clean = [col.strip('"') for col in selected_columns]
-
-        # Filter selected_columns to match the order in the table
         selected_columns_ordered = [col for col in ordered_columns if col in selected_columns_clean]
-
-        # Qualify selected columns with 'main' alias
         select_columns = ', '.join(f"main.\"{col}\"" for col in selected_columns_ordered) or '*'
-
-        # Select all columns from the staging table for the frontend
         staging_columns = ', '.join(f"staging.\"{col}\" AS \"{col}\" " for col in df.columns)
         
         query = f"""
-        SELECT DISTINCT {staging_columns}, {select_columns}
-        FROM tbl_zoominfo_contact_paid AS main
-        INNER JOIN {staging_table_name} staging ON {where_clause}
+            SELECT DISTINCT {staging_columns}, {select_columns}
+            FROM tbl_zoominfo_contact_paid AS main
+            INNER JOIN {staging_table_name} staging ON {where_clause}
         """
-        # print(query)
-
+        
         result_frontend = connection.execute(text(query))
-
-        # Process the results
         results = [dict(row._mapping) for row in result_frontend]
         
+        # Clean 'zi_contact_id' if necessary
         for result in results:
             if result.get('zi_contact_id') == 'nan':
                 result['zi_contact_id'] = None
-
-        if results:
-            import_time = datetime.now()
-            # Process results
-            df_export = pd.DataFrame()
-            
-            new_cols = required_columns + selected_columns_ordered
-
-            # Create a dictionary for all selected columns with their respective values from results
-            column_data = {column: [result.get(column, None) for result in results] for column in new_cols}
-
-            # Use pd.concat() to add the column data to df_export all at once
-            df_export = pd.concat([df_export, pd.DataFrame(column_data)], axis=1)
-            # print(df_export.head())
-            # Ensure all other columns are set to None
-            all_possible_columns = set(result_frontend.keys())
-            
-            other_columns = all_possible_columns - set(new_cols)
-            for column in other_columns:
-                df_export[column] = None
-
-            try:
-                # Query to fetch the column names from the target table
-                db_columns_query = """
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'tbl_zoominfo_contact_paid_log_records'
-                ORDER BY ordinal_position
-                """
-                ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
-
-                # Sort selected_columns based on the database order
-                final_columns =  ', '.join(f"\"{col}\"" for col in selected_columns_ordered) or '*'
-                excel_cols = '"domain", "first_name", "last_name", "linkedin_url", "zi_contact_id"'
-
-                selected_columns_sorted = excel_cols + ', ' + final_columns
-                
-                num_rows = df_export.shape[0]
-                # Create a new DataFrame with all necessary columns at once to avoid fragmentation
-                new_columns = {
-                    'import_time': [import_time] * num_rows,  # Repeat the scalar value for all rows
-                    'employee_id': [employee_id] * num_rows,  # Repeat the scalar value for all rows
-                    'file_name': [filename] * num_rows,       # Repeat the scalar value for all rows
-                    'selected_cols': [selected_columns_sorted] * num_rows  # Repeat the scalar value for all rows
-                }
-
-                # Add process_tag based on conditions
-                if set(selected_columns) == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
-                    new_columns['process_tag'] = ['Export - Email'] * num_rows
-                elif set(selected_columns) == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
-                    new_columns['process_tag'] = ['Export - Phone'] * num_rows
-                elif employee_role_py == 'user_b':
-                    new_columns['process_tag'] = ['Export - All'] * num_rows
-                else:
-                    new_columns['process_tag'] = ['Export - Selective'] * num_rows
-
-                # Concatenate the new columns to the original DataFrame
-                df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
-                
-                insert_cols = new_cols + ['import_time','employee_id','file_name','selected_cols','process_tag']
-                
-                filtered_insert_cols = [col for col in insert_cols if col in df_export.columns]
-
-                df_filtered = df_export[filtered_insert_cols]
-                
-            
-                df_filtered.to_sql(
-                    'tbl_zoominfo_contact_paid_log_records',
-                    db.get_bind(),
-                    if_exists='append',
-                    index=False,
-                    method='multi',
-                    chunksize=300 # Adjust as needed
-                )
-            except Exception as e:
-                print(f"An error occurred while inserting export records: {e}")
-                return JSONResponse(content={"error": str(e)}, status_code=500)
     except SQLAlchemyError as e:
-        # print(f"An error occurred: {e}")
-        return JSONResponse(content={"error": str(e)}, status_code=500)
+        logger.error(f"Error executing join query on temporary table '{staging_table_name}': {e}")
+        return JSONResponse(content={"error": "Failed to process data matching. Please check your selection criteria and try again."}, status_code=400)
+    except Exception as e:
+        logger.error(f"Unexpected error during query execution: {e}")
+        return JSONResponse(content={"error": "An unexpected error occurred during data processing."}, status_code=500)
     
-    finally:
-        # No need to drop the temporary table; it will be dropped automatically
-        pass
-
-    # Clean results for frontend
-    cleaned_results = clean_data(results)
+    # Step 7: Log the Export Operation
+    if results:
+        try:
+            gmt_plus_5_30 = pytz.timezone('Asia/Kolkata')
+            process_time = datetime.now(pytz.utc).astimezone(gmt_plus_5_30)
+            formatted_process_time = process_time.strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Determine process tag based on selected columns and user role
+            selected_set = set(selected_columns)
+            if selected_set == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
+                process_tag_new = 'Export - Email'
+            elif selected_set == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
+                process_tag_new = 'Export - Phone'
+            elif employee_role_py == 'user_b':
+                process_tag_new = 'Export - All'
+            else:
+                process_tag_new = 'Export - Selective'
+            
+            temp_results = clean_data(results)
+            metadata = {
+                'employee_id': employee_id,
+                'process_time': formatted_process_time,
+                'file_name': filename,
+                'process_tag': process_tag_new,
+            }
+            
+            df_records = pd.DataFrame(temp_results)
+            df_records['data_json'] = df_records.apply(lambda row: json.dumps(row.to_dict(), cls=DateTimeEncoder), axis=1)
+            df_log = pd.DataFrame({
+                'employee_id': [metadata['employee_id']] * len(df_records),
+                'process_time': [metadata['process_time']] * len(df_records),
+                'file_name': [metadata['file_name']] * len(df_records),
+                'process_tag': [metadata['process_tag']] * len(df_records),
+                'counts': len(df_records),
+                'data_json': df_records['data_json']
+            })
+            
+            log_table = 'tbl_zoominfo_contact_paid_log_records'
+            df_log.to_sql(
+                log_table,
+                db.get_bind(),
+                if_exists='append',
+                index=False,
+                method='multi',
+                dtype={
+                    'employee_id': String,
+                    'process_time': DateTime,
+                    'file_name': String,
+                    'process_tag': String,
+                    'counts': Integer,
+                    'data_json': JSON
+                }
+            )
+            db.commit()
+            logger.info(f"{len(df_log)} records logged successfully.")
+        except SQLAlchemyError as e:
+            logger.error(f"Error logging export operation: {e}")
+            return JSONResponse(content={"error": "Failed to log the export operation. Please contact support."}, status_code=500)
+        except Exception as e:
+            logger.error(f"Unexpected error during logging: {e}")
+            return JSONResponse(content={"error": "An unexpected error occurred while logging the export operation."}, status_code=500)
+    
+    # Step 8: Clean and Return Results
+    try:
+        cleaned_results = clean_data(results)
+    except Exception as e:
+        logger.error(f"Error cleaning results for frontend: {e}")
+        return JSONResponse(content={"error": "Failed to prepare data for display. Please try again."}, status_code=500)
+    
     return {"matches": cleaned_results}
-
 
 
 async def process_company_upload(
@@ -433,6 +453,7 @@ async def process_company_upload(
 ):
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
+    # employee_id = 'E00860'
     employee_role_py = employee_role_store.get('employee_role')
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
@@ -506,7 +527,7 @@ async def process_company_upload(
         staging_columns = ', '.join(f""" staging.\"{col}\" AS \"{col}\" """ for col in df.columns)
 
         query = f"""
-        SELECT DISTINCT {select_columns}, {staging_columns}
+        SELECT DISTINCT {staging_columns},{select_columns}
         FROM tbl_zoominfo_company_paid AS main
         INNER JOIN {staging_table_name} staging ON {where_clause}
         """
@@ -520,7 +541,14 @@ async def process_company_upload(
 
         # Process results for backend logging
         if results:
-            import_time = datetime.now()
+                        # Get the current time in GMT
+            gmt_plus_5_30 = pytz.timezone('Asia/Kolkata')
+
+            # Get the current time in GMT+5:30
+            process_time = datetime.now(pytz.utc).astimezone(gmt_plus_5_30)
+
+            # Format the time as a string (e.g., 'YYYY-MM-DD HH:MM:SS')
+            formatted_process_time = process_time.strftime("%Y-%m-%d %H:%M:%S")
             
             df_export = pd.DataFrame()
             
@@ -540,52 +568,62 @@ async def process_company_upload(
                 df_export[column] = None
             
             try:
-                # Query to fetch the column names from the target table
-                db_columns_query = """
-                SELECT column_name FROM information_schema.columns
-                WHERE table_name = 'tbl_zoominfo_company_paid_log_records'
-                ORDER BY ordinal_position
-                """
-                ordered_columns = [row[0] for row in db.execute(text(db_columns_query)).fetchall()]
-
-                # Sort selected_columns based on the database order
-                final_columns =  ', '.join(f"\"{col}\"" for col in selected_columns_ordered) or '*'
-                excel_cols = '"domain", "company_name"'
+                if employee_role_py == 'user_a':
+                    process_tag_new = 'Export - Selective'
+                else:
+                    process_tag_new = 'Export - All'
+                    
+                cleaned_results = clean_data(results)
                 
-                selected_columns_sorted = excel_cols + ', ' + final_columns
-                num_rows = df_export.shape[0]
-                # Create a new DataFrame with all necessary columns at once to avoid fragmentation
-                new_columns = {
-                    'import_time': [import_time] * num_rows,  # Repeat the scalar value for all rows
-                    'employee_id': [employee_id] * num_rows,  # Repeat the scalar value for all rows
-                    'file_name': [filename] * num_rows,       # Repeat the scalar value for all rows
-                    'selected_cols': selected_columns_sorted * num_rows,
+                # Metadata for all records (same for each record)
+                metadata = {
+                    'employee_id': employee_id,
+                    'process_time': formatted_process_time,  # Ensure this is a valid datetime object
+                    'file_name': filename,
+                    'process_tag': process_tag_new,
                 }
                 
-                if employee_role_py == 'user_a':
-                    new_columns['process_tag'] = ['Export - Selective'] * num_rows
-                else:
-                    new_columns['process_tag'] = ['Export - All'] * num_rows
+                # Create a DataFrame from cleaned_results (this holds individual records)
+                df_records = pd.DataFrame(cleaned_results)
 
-                df_export = pd.concat([df_export, pd.DataFrame(new_columns)], axis=1)
+                # Create a 'data_json' column by serializing each row into a JSON string
+                df_records['data_json'] = df_records.apply(lambda row: json.dumps(row.to_dict(), cls=DateTimeEncoder), axis=1)
 
-                insert_cols = new_cols + ['import_time','employee_id','file_name','selected_cols','process_tag']
+                # Create a new DataFrame that only holds the metadata and the 'data_json' column
+                df_log = pd.DataFrame({
+                    'employee_id': [metadata['employee_id']] * len(df_records),
+                    'process_time': [metadata['process_time']] * len(df_records),
+                    'file_name': [metadata['file_name']] * len(df_records),
+                    'process_tag': [metadata['process_tag']] * len(df_records),
+                    'counts': len(df_records),  # Same count for each record
+                    'data_json': df_records['data_json']  # Store the JSON records
+                })
                 
-                filtered_insert_cols = [col for col in insert_cols if col in df_export.columns]
-                filtered_insert_cols = list(set(filtered_insert_cols))
-
-
-                df_filtered = df_export[filtered_insert_cols]
-                # print(df_filtered.columns)
-
-                df_filtered.to_sql(
-                    'tbl_zoominfo_company_paid_log_records',
-                    db.get_bind(),
-                    if_exists='append',
-                    index=False,
-                    method='multi',
-                    chunksize=300 # Adjust as needed
-                )
+                # Log table name
+                log_table = 'tbl_zoominfo_company_paid_log_records'
+                
+                 # Insert the data using pandas.to_sql
+                try:
+                    df_log.to_sql(
+                        log_table,
+                        db.get_bind(),  # SQLAlchemy connection
+                        if_exists='append',  # Append to existing table
+                        index=False,  # Do not write the index to the table
+                        method='multi',  # Use batch insert
+                        dtype={
+                            'employee_id': String,
+                            'process_time': DateTime,
+                            'file_name': String,
+                            'process_tag': String,
+                            'counts': Integer,
+                            'data_json': JSON  # Ensure this is JSON or JSONB in the database
+                        }
+                    )
+                    db.commit()  # Ensure the transaction is committed
+                    # print(f"{len(df_log)} records inserted successfully.")
+                except Exception as e:
+                    print(f"An error occurred while inserting the log record: {e}")
+                    
             except Exception as e:
                 print(f"An error occurred while inserting export records: {e}")
                 return JSONResponse(content={"error": str(e)}, status_code=500)
@@ -601,6 +639,16 @@ async def process_company_upload(
     cleaned_results = clean_data(results)
     return {"matches": cleaned_results}
 
+CONTACT_TEMPLATE  = [
+    "ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations"
+   ]; 
+   
+COMPANY_TEMPLATE = [
+     "ZoomInfo Company ID","Company Name","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Employees","Employee Range","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Defunct Company","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Company Is Acquired","Company ID (Ultimate Parent)","Entity Name (Ultimate Parent)","Company ID (Immediate Parent)","Entity Name (Immediate Parent)","Relationship (Immediate Parent)"
+   ];
+
+from sqlalchemy.exc import IntegrityError
+from urllib.parse import quote, unquote
 
 @app.post("/import/")
 async def import_data(
@@ -608,27 +656,25 @@ async def import_data(
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db)
 ):  
-    # employee_id = employee_id_store.get('employee_id')
-    employee_id = 'T01294'
+    employee_id = employee_id_store.get('employee_id')
+    # employee_id = 'E00860'
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
-    table_name = 'tbl_zoominfo_company_paid' if table_type == TableType.company else 'tbl_zoominfo_contact_paid'
+    # Set the table and template based on the type
+    if table_type == TableType.company:
+        table_name = 'tbl_zoominfo_company_paid'
+        log_table_name = 'tbl_zoominfo_company_paid_log_records'
+        expected_columns = COMPANY_TEMPLATE
+    else:
+        table_name = 'tbl_zoominfo_contact_paid'
+        log_table_name = 'tbl_zoominfo_contact_paid_log_records'
+        expected_columns = CONTACT_TEMPLATE
 
-    session = SessionLocal()
+    total_records_inserted = 0
+    file_messages = []
 
     try:
-        # Retrieve column names from the selected table
-        table_columns_query = text("""
-            SELECT column_name
-            FROM information_schema.columns
-            WHERE table_name = :table_name
-        """)
-        table_columns = set(row[0] for row in session.execute(table_columns_query, {'table_name': table_name}))
-
-        total_records_inserted = 0
-        file_messages = []
-
         for file in files:
             if file.filename == '':
                 continue
@@ -636,78 +682,85 @@ async def import_data(
             file_content = await file.read()
             file_stream = io.BytesIO(file_content)
 
-            if file.filename.endswith('.xlsx'):
-                data = pd.read_excel(file_stream, engine='openpyxl')
-            elif file.filename.endswith('.csv'):
+            if file.filename.endswith('.xlsx'): 
+                data = pd.read_excel(file_stream, engine='openpyxl')    
+            elif file.filename.endswith('.csv'):    
                 data = pd.read_csv(file_stream, encoding='utf-8', dtype=str)
             else:
                 continue
 
-            # Clean data and filter columns
+            # Clean data and filter columns to match expected columns
             data.columns = [col.strip() for col in data.columns]
-            
+            missing_columns = set(expected_columns) - set(data.columns)
+            if missing_columns:
+                return JSONResponse(
+                    content={"error": f"Missing columns: {', '.join(missing_columns)}"},
+                    status_code=400
+                )
 
-            # Add db_file_name column if it exists in the table schema
-            if 'db_file_name' in table_columns:
-                data['db_file_name'] = file.filename
-
-            # Filter columns that are present in the table
-            data = data[[col for col in data.columns if col in table_columns]]
-            
-            # Insert data into the database
+            # Since the primary key is not in the template, we'll let the database handle it automatically
+            # Insert the data into the database without the primary key
             data = data.where(pd.notna(data), None)  # Replace NaNs with None
-            # Insert data into the database
-            columns = ', '.join(f'"{col}"' for col in data.columns if col != 'tbl_zoominfo_company_paid_id')
-            # print(columns)
-            placeholders = ', '.join(['%s'] * (len(data.columns)))
-            # print(placeholders)
-            insert_query = f"""
-                INSERT INTO {table_name} ({columns})
-                VALUES ({placeholders})
-            """
-            # print(insert_query)
-
-            with db.connection().connection.cursor() as cursor:
-                for _, row in data.iterrows():
-                    try:
-                        cursor.execute(insert_query, tuple(row[col] for col in data.columns if col != 'tbl_zoominfo_company_paid_id'))
-                    except Exception as e:
-                        print(f"Error occurred: {e}")
-                        db.rollback()
-                        file_messages.append(f"File '{file.filename}': Error inserting data - {str(e)}")
-                        break
+            
+            try:
+                # Insert data using pandas' to_sql for batch processing
+                data.to_sql(
+                    table_name,
+                    db.get_bind(),
+                    if_exists='append',  # Append to the existing table
+                    index=False,  # We don't need to add the dataframe index as a column
+                    method='multi',  # Batch insert
+                    )
                 db.commit()
 
-            records_inserted = len(data)
-            total_records_inserted += records_inserted
-            file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
-
-            # Log the upload event
-            import_time = datetime.now()
+                records_inserted = len(data)
+                total_records_inserted += records_inserted
+                file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
             
-            if table_type == TableType.contact:
-                log_table_name = 'tbl_zoominfo_contact_paid_log_records'
-            elif table_type == TableType.company:
-                log_table_name = 'tbl_zoominfo_company_paid_log_records'
-                
+            except IntegrityError as e:
+                # Handle primary key or unique constraint violation
+                print(f"Error occurred: {e}")
+                db.rollback()
+                file_messages.append(f"File '{file.filename}': Error inserting data - {str(e)}")
+                continue
+
+                                    # Get the current time in GMT
+            gmt_plus_5_30 = pytz.timezone('Asia/Kolkata')
+
+            # Get the current time in GMT+5:30
+            process_time = datetime.now(pytz.utc).astimezone(gmt_plus_5_30)
+
+            # Format the time as a string (e.g., 'YYYY-MM-DD HH:MM:SS')
+            formatted_process_time = process_time.strftime("%Y-%m-%d %H:%M:%S")
             try:
-                log_data = data.copy()
-                log_data['import_time'] = import_time
-                log_data['employee_id'] = employee_id
-                log_data['file_name'] = file.filename
-                log_data['process_tag'] = 'Import'
-                log_data['selected_cols'] = columns
-                if table_type == TableType.company:
-                    log_data['domain'] = None
-                    log_data['company_name'] = None
-                elif table_type == TableType.contact:
-                    log_data['domain'] = None
-                    log_data['first_name'] = None
-                    log_data['last_name'] = None
-                    log_data['linkedin_url'] = None
-                    log_data['zi_contact_id'] = None
-                
-                log_data.to_sql(log_table_name, engine, if_exists='append', index=False)
+                # Convert each record to a log entry
+                for idx, record in data.iterrows():
+                    metadata = {
+                        'employee_id': employee_id,
+                        'process_time': formatted_process_time,
+                        'file_name': file.filename,
+                        'process_tag': 'Import',
+                        'counts': len(data),  # Each log entry is for a single record
+                        'data_json': json.dumps(record.to_dict())  # Store each record as JSON
+                    }
+
+                    df_log = pd.DataFrame([metadata])
+
+                    # Insert each log entry for the corresponding record
+                    df_log.to_sql(
+                        log_table_name, 
+                        db.get_bind(), 
+                        if_exists='append', 
+                        index=False, 
+                        dtype={
+                            'employee_id': String,
+                            'process_time': DateTime,
+                            'file_name': String,
+                            'process_tag': String,
+                            'counts': Integer,
+                            'data_json': JSON  # Use JSON or JSONB depending on your database
+                        }
+                    )
                 db.commit()
             except Exception as e:
                 print(f"An error occurred while inserting log records: {e}")
@@ -720,95 +773,104 @@ async def import_data(
     finally:
         db.close()
 
-    return JSONResponse(content={"message": f"Total records inserted: {total_records_inserted}", "file_messages": file_messages})
+    return JSONResponse(content={
+        "message": f"Total records inserted: {total_records_inserted}", 
+        "file_messages": file_messages
+    })
+
+import json
 
 @app.get("/user/download-activity/")
 async def download_activity(
     employee_id: str,
-    import_time: str,
+    process_time: str,
     table_type: TableType = Query(...),
     db: Session = Depends(get_db)
 ):
     results = []
     try:
-        # Determine the table name based on table_type
+        # Determine the new table name based on table_type
         if table_type == TableType.contact:
             table_name = 'tbl_zoominfo_contact_paid_log_records'
         elif table_type == TableType.company:
             table_name = 'tbl_zoominfo_company_paid_log_records'
+        else:
+            raise HTTPException(status_code=400, detail="Invalid table type.")
 
-        if table_type == TableType.contact:
-            cols = """ "tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" """
-        elif table_type == TableType.company:
-            cols = """ "tbl_zoominfo_company_paid_id","ZoomInfo Company ID","Company Name","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Employees","Employee Range","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Defunct Company","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Company Is Acquired","Company ID (Ultimate Parent)","Entity Name (Ultimate Parent)","Company ID (Immediate Parent)","Entity Name (Immediate Parent)","Relationship (Immediate Parent)","Query Name","Company Description","db_file_name","created_date","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","Company HQ Phone_Country","AFS Score Name","AFS Score","AFS Bucket" """
-        
-        
-        query1 = text(f"""
-                SELECT DISTINCT selected_cols
-                FROM {table_name}
-                WHERE employee_id = '{employee_id}' AND import_time = '{import_time}'
-                """)
-        columns = db.execute(query1, {"employee_id": employee_id, "import_time": import_time}).fetchall()
-        column_names = [col[0] for col in columns]
-        column_names_str = ', '.join(column_names)
-        
-        if table_type == TableType.contact:
-            cols = ["domain", "first_name", "last_name", "linkedin_url", "zi_contact_id"]
-        elif table_type == TableType.company:
-            cols = ["domain", "company_name"]
+        # Decode process_time to handle any URL-encoded characters properly
+        process_time = unquote(process_time)
 
-# Convert list of columns to a comma-separated string
-        cols_str = ", ".join(cols)
-        
+        # Query to get the relevant records from the log table
         query = text(f"""
-        SELECT {cols_str}, {column_names_str}
-        FROM {table_name}
-        WHERE employee_id = '{employee_id}' AND import_time = '{import_time}'
+            SELECT data_json 
+            FROM {table_name}
+            WHERE employee_id = :employee_id AND process_time = :process_time
         """)
 
-        
-        # Execute the query
-        result = db.execute(query, {"employee_id": employee_id, "import_time": import_time}).fetchall()
-        columns = [desc[0] for desc in db.execute(query, {"employee_id": employee_id, "import_time": import_time}).cursor.description]
-        results.extend([dict(zip(columns, row)) for row in result])
+        result = db.execute(query, {"employee_id": employee_id, "process_time": process_time}).fetchall()
 
+        # Extract the JSON data from each row and append directly to the results list
+        results = [json.loads(x[0]) for x in result]
 
     except Exception as e:
         print(f"An error occurred: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-    return JSONResponse(content={"results": results})
-    
-    
+    return results
 
 @app.get("/user/last-activities/")
-async def get_last_activities(db: Session = Depends(get_db),table_type: TableType = Query(...)):
+async def get_last_activities(db: Session = Depends(get_db), table_type: TableType = Query(...)):
     employee_id = employee_id_store.get('employee_id')
+
+    # employee_id = 'T01294'  # Replace with actual retrieval logic
+
     if not employee_id:
         raise HTTPException(status_code=400, detail="Employee ID not found.")
+
     results = []
     try:
-        # Determine the table name based on table_type
+        # Determine the new table name based on table_type
         if table_type == TableType.contact:
             table_name = 'tbl_zoominfo_contact_paid_log_records'
         elif table_type == TableType.company:
             table_name = 'tbl_zoominfo_company_paid_log_records'
-        
-        
+        else:
+            raise HTTPException(status_code=400, detail="Invalid table type.")
+
+        # Query to fetch the last activities grouped by employee_id, process_time, file_name, process_tag
         query = text(f"""
-        SELECT employee_id, import_time, file_name, process_tag,count(1) cnt FROM {table_name}
-        WHERE employee_id = :employee_id group by employee_id, import_time, file_name, process_tag ORDER BY import_time DESC
-        """) 
-        
+            SELECT DISTINCT employee_id, process_time, file_name, process_tag, counts cnt, process_time process_time_download
+            FROM {table_name}
+            WHERE employee_id = :employee_id
+            ORDER BY process_time DESC
+        """)
+
+        # Execute the query and fetch the results
         result = db.execute(query, {"employee_id": employee_id}).fetchall()
-        # result = db.execute(query, {"employee_id": employee_id}).fetchall()
-        columns = [desc[0] for desc in db.execute(query, {"employee_id": employee_id}).cursor.description]
-        results.extend([dict(zip(columns, row)) for row in result])
-        
+
+        # Convert result to a list of dictionaries
+        columns = ['employee_id', 'process_time', 'file_name', 'process_tag', 'cnt']
+        results = [dict(zip(columns, row)) for row in result]
+
+        # Generate download link for each activity
         for record in results:
-            record['download_link'] = f"/user/download-activity/?employee_id={employee_id}&import_time={record['import_time']}&table_type={table_type.value}"
-        
+            process_time_str = str(record['process_time']).replace(' ','%20').replace(':','%3A') if record['process_time'] else ""
+
+            # URL-encode process_time to replace spaces with %20
+            # process_time_encoded = quote(process_time_str)
+
+            record['download_link'] = (
+                f"/user/download-activity/?employee_id={record['employee_id']}"
+                f"&process_time={process_time_str}&table_type={table_type.value}"
+            )
+            # print(record['download_link'])
+            record['process_time'] = str(record['process_time'])
+
         return results
 
     except Exception as e:
+        print(f"An error occurred: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+if __name__=="__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

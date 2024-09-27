@@ -1,4 +1,3 @@
-// ResultsModal.js
 import React from 'react';
 import {
   Modal,
@@ -24,7 +23,7 @@ import {
 const ResultsModal = ({
   isOpen,
   onClose,
-  results,
+  results,  // Assuming "results" now refers to the "matches" array
   displayedResults,
   currentPage,
   totalPages,
@@ -32,14 +31,10 @@ const ResultsModal = ({
   handleExport,
   gradientBg,
   hoverBg,
-  selectedOption,
-  allContactColumns,
-  selectedColumns,
-  allCompanyColumns,
   ExporttableType
 }) => {
 
-  // Function to get all unique columns from results
+  // Function to get all unique columns from matches (results)
   const getAllColumnsFromResults = () => {
     const allColumnsSet = new Set();
 
@@ -54,33 +49,8 @@ const ResultsModal = ({
 
   // Function to determine column order
   const sortedColumn = () => {
-    let columnOrder = [];
-
     const resultColumns = getAllColumnsFromResults();
-
-    if (ExporttableType === 'Company') {
-      columnOrder = resultColumns;
-    } else {
-      if (selectedOption === 'Email') {
-        columnOrder = ["ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Email Address"];
-      } else if (selectedOption === 'Phone') {
-        columnOrder = ["ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Mobile phone", "Direct Phone Number", "Company HQ Phone"];
-      } else {
-        columnOrder = resultColumns;
-      }
-    }
-
-    // Define a preferred order for some columns
-    const preferredOrder = ["domain", "first_name", "last_name", "company_name", "linkedin_url", "zi_contact_id"];
-
-    // Combine preferred order with remaining columns
-    const orderedColumns = [
-      ...preferredOrder.filter(col => columnOrder.includes(col)),
-      ...columnOrder.filter(col => !preferredOrder.includes(col)),
-    ];
-
-    // Return unique columns in order
-    return Array.from(new Set(orderedColumns));
+    return resultColumns;  // Just show all columns in the natural order of the data
   };
 
   // Render data in the order defined by sortedColumn

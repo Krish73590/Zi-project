@@ -123,7 +123,7 @@ const ExportDataBoxUserB = ({
       });
       return;
     }
-
+    const startTime = Date.now();
     setUploadedFileName(file.name.replace(/\.[^/.]+$/, "") || 'results');
 
     const formData = new FormData();
@@ -154,19 +154,39 @@ const ExportDataBoxUserB = ({
       setCurrentPage(1);
       setDisplayedResults(allResults.slice(0, 5));
       onOpen();
-    } catch (error) {
-      console.error('Error uploading file:', error);
+      const endTime = Date.now();
+      const timeTakenSeconds = ((endTime - startTime) / 1000).toFixed(2);
+      // Show success toast with time taken
       toast({
-        title: 'Error',
-        description: 'Failed to upload file.',
-        status: 'error',
+        title: 'Success',
+        description: `File processed successfully in ${timeTakenSeconds} seconds.`,
+        status: 'success',
         duration: 5000,
         isClosable: true,
       });
-    } finally {
-      setexportLoading(false);
+
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    let errorMessage = 'Failed to upload file.';
+
+    if (error.response && error.response.data && error.response.data.error) {
+      errorMessage = error.response.data.error;
+    } else if (error.message) {
+      errorMessage = error.message;
     }
-  };
+    const endTime = Date.now();
+    const timeTakenSeconds = ((endTime - startTime) / 1000).toFixed(2);
+    toast({
+      title: 'Error',
+      description: `${errorMessage} (Time taken: ${timeTakenSeconds} seconds)`,
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
+  } finally {
+    setexportLoading(false);
+  }
+};
 
   const handleExportTabChange = (index) => {
     const tabValues = ['Company', 'Contact']; // Map the index to your tab values
@@ -182,8 +202,8 @@ const ExportDataBoxUserB = ({
         const uniqueColumns = [...new Set(response.data.columns)];
         if (ExporttableType === 'Company') {
           setCompanyColumns(uniqueColumns);
-          console.log("Current tableType:", ExporttableType);
-          console.log("dfsfsd", uniqueColumns);
+          // console.log("Current tableType:", ExporttableType);
+          // console.log("dfsfsd", uniqueColumns);
         } else {
           setContactColumns(uniqueColumns);
         }
