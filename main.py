@@ -391,6 +391,7 @@ async def process_upload(
                 process_tag_new = 'Export - Selective'
             
             temp_results = clean_data(results)
+            
             metadata = {
                 'employee_id': employee_id,
                 'process_time': formatted_process_time,
@@ -399,6 +400,16 @@ async def process_upload(
             }
             
             df_records = pd.DataFrame(temp_results)
+            if process_tag_new == 'Export - Email':
+            # Keep only records where 'Email Address' is non-blank
+                df_records = df_records[df_records['Email Address'].notna() & (df_records['Email Address'] != '')]
+            elif process_tag_new == 'Export - Phone':
+                # Keep records where at least one of the phone columns is non-blank
+                df_records = df_records[
+                    (df_records['Mobile phone'].notna() & (df_records['Mobile phone'] != '')) |
+                    (df_records['Direct Phone Number'].notna() & (df_records['Direct Phone Number'] != '')) |
+                    (df_records['Company HQ Phone'].notna() & (df_records['Company HQ Phone'] != ''))
+                ]
             df_records['data_json'] = df_records.apply(lambda row: json.dumps(row.to_dict(), cls=DateTimeEncoder), axis=1)
             df_log = pd.DataFrame({
                 'employee_id': [metadata['employee_id']] * len(df_records),
