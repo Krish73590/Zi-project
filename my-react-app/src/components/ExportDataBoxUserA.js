@@ -91,6 +91,18 @@ const ExportDataBoxUserA = ({
   const handleExportTabChange = (index) => {
     const tabValues = ['Company', 'Contact']; // Map the index to your tab values
     setExportTableType(tabValues[index]);
+
+    // Reset checkbox states on tab switch
+  setMatchCompanyDomain(false);
+  setMatchCompanyName(false);
+  setmatchZICompanyID(false);
+  setMatchZIContactID(false);
+  setMatchContactDomain(false);
+  setMatchLinkedinUrl(false);
+  
+  setSelectedColumns([]);
+  setSelectAll(false);
+  setUnselectAll(false);
   };
 
   const handleExportDownload = () => {
