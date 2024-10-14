@@ -27,7 +27,7 @@ const Register = () => {
   const [department, setDepartment] = useState('');
   const [blood_group, setBlood_group] = useState('');
   const [mobile_no, setMobile_no] = useState('');
-  const [role, setrole] = useState('user_a');
+  const [role] = useState('user_a');
   const [loading, setLoading] = useState(false);
   const toast = useToast();
   const navigate = useNavigate();

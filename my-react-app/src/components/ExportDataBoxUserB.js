@@ -142,6 +142,47 @@ const parseExcelFile = (file) => {
   });
 };
 
+const stringSimilarity = (str1, str2) => {
+  const normalize = (str) => str.trim().toLowerCase().replace(/[\s_-]+/g, '');
+
+  const a = normalize(str1);
+  const b = normalize(str2);
+
+  const matrix = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : i))
+  );
+
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] =
+          Math.min(
+            matrix[i - 1][j] + 1, // Deletion
+            matrix[i][j - 1] + 1, // Insertion
+            matrix[i - 1][j - 1] + 1 // Substitution
+          );
+      }
+    }
+  }
+
+  const maxLen = Math.max(a.length, b.length);
+  const distance = matrix[a.length][b.length];
+  return (maxLen - distance) / maxLen; // Similarity score between 0 and 1
+};
+
+const predefinedColumnSets = {
+  domain: ['domain', 'website', 'site', 'web_address'],
+  first_name: ['first_name', 'fname', 'given_name', 'first', 'First Name'],
+  last_name: ['last_name', 'surname', 'Last Name', 'last', 'Last Name'],
+  linkedin_url: ['linkedin_url', 'linkedin', 'linkedin_profile', 'linkedin_contact','LinkedIn Contact Profile URL'],
+  zi_contact_id: ['zi_contact_id', 'contact_id', 'zoominfo_contact_id', 'ZoomInfo Contact ID'],
+  zi_company_id: ['zi_company_id', 'company_id', 'zoominfo_company_id','ZoomInfo Company ID'],
+  company_name: ['company_name', 'company', 'organization', 'business_name','Company Name'],
+};
+
+
 const handleExportSubmit = async () => {
   if (!file) {
     toast({
@@ -154,43 +195,64 @@ const handleExportSubmit = async () => {
     return;
   }
 
-  const parsedColumns = await parseExcelFile(file); // Rename for clarity
-  setexcelColumns(parsedColumns);  // Set the uploaded Excel columns
-  console.log(parsedColumns);
+  // Parse the Excel file to get the column headers
+  const parsedColumns = await parseExcelFile(file);
+  console.log('Parsed Columns:', parsedColumns);
 
-  let updatedRequiredColumns = []; // Declare this as 'let' to allow updates
+  // Define the required columns dynamically based on conditions
+  let updatedRequiredColumns = [];
+  if (matchContactOnlyDomain) updatedRequiredColumns.push('domain');
+  if (matchContactDomain) updatedRequiredColumns.push('domain', 'first_name', 'last_name');
+  if (matchCompanyDomain) updatedRequiredColumns.push('domain');
+  if (matchLinkedinUrl) updatedRequiredColumns.push('linkedin_url');
+  if (matchZIContactID) updatedRequiredColumns.push('zi_contact_id');
+  if (matchZICompanyID) updatedRequiredColumns.push('zi_company_id');
+  if (matchCompanyName) updatedRequiredColumns.push('company_name');
 
-  if (matchContactOnlyDomain) {
-    updatedRequiredColumns.push('domain');
-  }
-  if (matchContactDomain) {
-    updatedRequiredColumns.push('domain', 'first_name', 'last_name');
-  }
-  if (matchCompanyDomain) {
-    updatedRequiredColumns.push('domain');
-  }
-  if (matchLinkedinUrl) {
-    updatedRequiredColumns.push('linkedin_url');
-  }
-  if (matchZIContactID) {
-    updatedRequiredColumns.push('zi_contact_id');
-  }
-  if (matchZICompanyID) {
-    updatedRequiredColumns.push('zi_company_id');
-  }
-  if (matchCompanyName) {
-    updatedRequiredColumns.push('company_name');
-  }
+  // Remove duplicates from the required columns
+  updatedRequiredColumns = [...new Set(updatedRequiredColumns)];
 
-  // Remove duplicates if necessary
-  updatedRequiredColumns = [...new Set(updatedRequiredColumns)]; 
+  // Set the required and parsed columns in state (React state updates asynchronously)
+  setrequiredColumns(updatedRequiredColumns);
+  setexcelColumns(parsedColumns);
 
-  setrequiredColumns(updatedRequiredColumns); // Set the required columns
-  // console.log(updatedRequiredColumns);
+  console.log('Required Columns:', updatedRequiredColumns);
 
-  // Open the column mapping modal for user input
+  // Initialize mapping
+  const initialMapping = {};
+
+  updatedRequiredColumns.forEach((reqCol) => {
+    const possibleMatches = predefinedColumnSets[reqCol] || [reqCol]; // Get possible names
+
+    let bestMatch = '';
+    let highestSimilarity = 0;
+
+    parsedColumns.forEach((excelCol) => {
+      possibleMatches.forEach((altName) => {
+        const similarity = stringSimilarity(altName, excelCol);
+        if (similarity > highestSimilarity) {
+          highestSimilarity = similarity;
+          bestMatch = excelCol;
+        }
+      });
+    });
+
+    // Only map if similarity score is above a threshold (e.g., 0.8)
+    if (highestSimilarity >= 0.8) {
+      initialMapping[reqCol] = bestMatch;
+    }
+  });
+
+  console.log('Initial Mapping:', initialMapping);
+
+  // Ensure the mapping is correctly set in state
+  setMappedColumns(initialMapping);
+
+  // Open the modal for user review (after mapping is complete)
   setIsModalOpen(true);
 };
+
+
 
 const handleMappingSubmit = async () => {
   // Close the modal and start the export process
@@ -206,14 +268,13 @@ const handleMappingSubmit = async () => {
   if (uniqueMappedValues.size !== mappedValues.length) {
     toast({
       title: 'Error',
-      description: 'Each required column must be mapped to a unique excel column.',
+      description: 'Each required column must be mapped to a unique Excel column.',
       status: 'error',
       duration: 5000,
       isClosable: true,
     });
     return;
   }
-
 
   setIsModalOpen(false);
   setexportLoading(true);
@@ -237,9 +298,7 @@ const handleMappingSubmit = async () => {
 
   try {
     const response = await axios.post(`${process.env.REACT_APP_API_URL}/upload/user_b`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
 
     const allResults = response.data.matches;
@@ -251,8 +310,7 @@ const handleMappingSubmit = async () => {
 
     const endTime = Date.now();
     const timeTakenSeconds = ((endTime - startTime) / 1000).toFixed(2);
-    // reversedMapping = {};
-    // Show success toast with time taken
+
     toast({
       title: 'Success',
       description: `File processed successfully in ${timeTakenSeconds} seconds.`,
@@ -260,12 +318,11 @@ const handleMappingSubmit = async () => {
       duration: 5000,
       isClosable: true,
     });
-
   } catch (error) {
     console.error('Error uploading file:', error);
     let errorMessage = 'Failed to upload file.';
 
-    if (error.response && error.response.data && error.response.data.error) {
+    if (error.response?.data?.error) {
       errorMessage = error.response.data.error;
     } else if (error.message) {
       errorMessage = error.message;
@@ -286,7 +343,6 @@ const handleMappingSubmit = async () => {
     setexcelColumns([]);
     setMappedColumns([]);
     setrequiredColumns([]);
-
   }
 };
 
@@ -835,75 +891,76 @@ const handleMappingSubmit = async () => {
     </Button>
 
     {isModalOpen && (
-      <Modal onClose={() => setIsModalOpen(false)} isOpen={isModalOpen} size="lg">
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Map Columns</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Box as="form" pt={4}>
-              <VStack spacing={6} align="stretch">
-                {requiredColumns.map((requiredColumn) => {
-                  const usedColumns = Object.values(mappedColumns).filter(
-                    (value) => value && value !== mappedColumns[requiredColumn]
-                  );
+  <Modal onClose={() => setIsModalOpen(false)} isOpen={isModalOpen} size="lg">
+    <ModalOverlay />
+    <ModalContent>
+      <ModalHeader>Map Columns</ModalHeader>
+      <ModalCloseButton />
+      <ModalBody>
+        <Box as="form" pt={4}>
+          <VStack spacing={6} align="stretch">
+            {requiredColumns.map((requiredColumn) => {
+              const usedColumns = Object.values(mappedColumns).filter(
+                (value) => value && value !== mappedColumns[requiredColumn]
+              );
 
-                  const availableColumns = excelColumns.filter(
-                    (col) => !usedColumns.includes(col)
-                  );
+              const availableColumns = excelColumns.filter(
+                (col) => !usedColumns.includes(col)
+              );
 
-                  return (
-                    <Flex key={requiredColumn} alignItems="center">
-                      {/* Required column on the left */}
-                      <Box w="40%" pr={4}>
-                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">
-                          {requiredColumn}
-                        </FormLabel>
-                      </Box>
+              return (
+                <Flex key={requiredColumn} alignItems="center">
+                  <Box w="40%" pr={4}>
+                    <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">
+                      {requiredColumn}
+                    </FormLabel>
+                  </Box>
 
-                      {/* Dropdown for excelColumns on the right */}
-                      <Box w="60%">
-                        <Select
-                          placeholder="Select a column"
-                          size="md"
-                          bg="white"
-                          value={mappedColumns[requiredColumn] || ""}
-                          onChange={(e) =>
-                            setMappedColumns((prev) => ({
-                              ...prev,
-                              [requiredColumn]: e.target.value,
-                            }))
-                          }
-                        >
-                          {availableColumns.map((col) => (
-                            <option key={col} value={col}>
-                              {col}
-                            </option>
-                          ))}
-                        </Select>
-                      </Box>
-                    </Flex>
-                  );
-                })}
-              </VStack>
-            </Box>
-          </ModalBody>
-          <ModalFooter>
-            <Button
-              colorScheme="blue"
-              mr={3}
-              onClick={handleMappingSubmit}
-              isDisabled={!Object.keys(mappedColumns).length}
-            >
-              Next
-            </Button>
-            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
-              Cancel
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-    )}
+                  <Box w="60%">
+                    <Select
+                      placeholder="Select a column"
+                      size="md"
+                      bg="white"
+                      value={mappedColumns[requiredColumn] || ''}
+                      onChange={(e) =>
+                        setMappedColumns((prev) => ({
+                          ...prev,
+                          [requiredColumn]: e.target.value,
+                        }))
+                      }
+                    >
+                      {availableColumns.map((col) => (
+                        <option key={col} value={col}>
+                          {col}
+                        </option>
+                      ))}
+                    </Select>
+                  </Box>
+                </Flex>
+              );
+            })}
+          </VStack>
+        </Box>
+      </ModalBody>
+      <ModalFooter>
+        <Button
+          colorScheme="blue"
+          mr={3}
+          onClick={handleMappingSubmit}
+          isDisabled={!Object.keys(mappedColumns).length}
+        >
+          Next
+        </Button>
+        <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
+          Cancel
+        </Button>
+      </ModalFooter>
+    </ModalContent>
+  </Modal>
+)}
+
+
+
 
       </Stack>
     </Box>

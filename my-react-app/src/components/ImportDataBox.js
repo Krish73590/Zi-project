@@ -12,11 +12,9 @@ import {
   TabList,
   Text,
   Icon,
-  Spinner,
-  useBreakpointValue
+  Spinner
 } from '@chakra-ui/react';
 import { ImDownload3 } from 'react-icons/im';
-import { keyframes } from '@emotion/react';
 
 const ImportDataBox = ({
   handleImportTabChange,

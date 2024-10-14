@@ -1,5 +1,5 @@
 import React from 'react';
-import { Flex, Text, Menu, MenuButton, Button, MenuList, MenuItem, Icon} from '@chakra-ui/react';
+import { Flex, Text, Menu, MenuButton, Button, MenuList, MenuItem} from '@chakra-ui/react';
 import { ChevronDownIcon } from "@chakra-ui/icons";
 const Header = ({ user, handleLogout }) => (
   <Flex
