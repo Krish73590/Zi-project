@@ -30,6 +30,15 @@ import {
   useToast,
   useDisclosure,
   VStack,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  Select,
+  ModalFooter,
+  Flex 
 } from '@chakra-ui/react';
 import { ImDownload3 } from 'react-icons/im';
 import { saveAs } from 'file-saver';
@@ -38,6 +47,8 @@ import ResultsModal from './ResultsModal';
 import { utils, write } from 'xlsx';
 import { useOutsideClick } from '@chakra-ui/react';
 import { useRef } from 'react';
+import * as XLSX from 'xlsx';
+
 const ExportDataBoxUserA = ({
   gradient,
   gradientBg,
@@ -68,10 +79,14 @@ const ExportDataBoxUserA = ({
   const [matchLinkedinUrl, setMatchLinkedinUrl] = useState(false);
   const [matchCompanyName, setMatchCompanyName] = useState(false);
   const [matchZIContactID, setMatchZIContactID] = useState(false);
+  const [matchZICompanyID, setmatchZICompanyID] = useState(false);
   const [selectedOption, setSelectedOption] = useState('');
   // const columnOrder = ["domain","first_name","last_name","linkedin_url","zi_contact_id","ZoomInfo Contact ID", "First Name", "Last Name", "Website", "LinkedIn Contact Profile URL", "Email Address"];
   const [uploadedFileName, setUploadedFileName] = useState('results');
-
+  const [requiredColumns, setrequiredColumns] = useState([]); 
+  const [excelColumns, setexcelColumns] = useState([]); 
+  const [isModalOpen, setIsModalOpen] = useState(false); // For showing the modal
+  const [mappedColumns, setMappedColumns] = useState({}); // For storing the user’s mapped columns
 
   const handleExportTabChange = (index) => {
     const tabValues = ['Company', 'Contact']; // Map the index to your tab values
@@ -112,19 +127,100 @@ const ExportDataBoxUserA = ({
         isClosable: true,
     });
 };
-   
 
-  const handleExportSubmit = async () => {
-    if (!file) {
-      toast({
-        title: 'Error',
-        description: 'Please upload a file.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-      return;
-    }
+const parseExcelFile = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = new Uint8Array(event.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const columnHeaders = XLSX.utils.sheet_to_json(firstSheet, { header: 1 })[0];
+      resolve(columnHeaders);
+      console.log(columnHeaders);
+    };
+    reader.onerror = (error) => reject(error);
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+const handleExportSubmit = async () => {
+  if (!file) {
+    toast({
+      title: 'Error',
+      description: 'Please upload a file.',
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
+    return;
+  }
+
+  const parsedColumns = await parseExcelFile(file); // Rename for clarity
+  setexcelColumns(parsedColumns);  // Set the uploaded Excel columns
+  console.log(parsedColumns);
+
+  let updatedRequiredColumns = []; // Declare this as 'let' to allow updates
+
+  if (matchContactOnlyDomain) {
+    updatedRequiredColumns.push('domain');
+  }
+  if (matchContactDomain) {
+    updatedRequiredColumns.push('domain', 'first_name', 'last_name');
+  }
+  if (matchCompanyDomain) {
+    updatedRequiredColumns.push('domain');
+  }
+  if (matchLinkedinUrl) {
+    updatedRequiredColumns.push('linkedin_url');
+  }
+  if (matchZIContactID) {
+    updatedRequiredColumns.push('zi_contact_id');
+  }
+  if (matchZICompanyID) {
+    updatedRequiredColumns.push('zi_company_id');
+  }
+  if (matchCompanyName) {
+    updatedRequiredColumns.push('company_name');
+  }
+
+  // Remove duplicates if necessary
+  updatedRequiredColumns = [...new Set(updatedRequiredColumns)]; 
+
+  setrequiredColumns(updatedRequiredColumns); // Set the required columns
+  console.log(updatedRequiredColumns);
+
+  // Open the column mapping modal for user input
+  setIsModalOpen(true);
+};
+
+
+const handleMappingSubmit = async () => {
+  // Close the modal and start the export process
+  const reversedMapping = {};
+  for (const [requiredColumn, selectedExcelColumn] of Object.entries(mappedColumns)) {
+    reversedMapping[selectedExcelColumn] = requiredColumn;
+  }
+  console.log('Reversed Column Mapping:', reversedMapping);
+
+  const mappedValues = Object.values(reversedMapping);
+  const uniqueMappedValues = new Set(mappedValues);
+
+  if (uniqueMappedValues.size !== mappedValues.length) {
+    toast({
+      title: 'Error',
+      description: 'Each required column must be mapped to a unique excel column.',
+      status: 'error',
+      duration: 5000,
+      isClosable: true,
+    });
+    return;
+  }
+
+
+  setIsModalOpen(false);
+  setexportLoading(true);
+
 
     setUploadedFileName(file.name.replace(/\.[^/.]+$/, "") || 'results');
 
@@ -142,7 +238,9 @@ const ExportDataBoxUserA = ({
     formData.append('match_linkedin_url', matchLinkedinUrl);
     formData.append('match_zi_contact_id', matchZIContactID);
     formData.append('match_company_name', matchCompanyName);
-
+    formData.append('column_mapping', JSON.stringify(reversedMapping));
+    formData.append('match_zi_company_id', matchZICompanyID);
+    
     setexportLoading(true);
     const startTime = Date.now();
 
@@ -213,9 +311,9 @@ const ExportDataBoxUserA = ({
   const handleOptionChange = (value) => {
     setSelectedOption(value);
     if (value === 'Email') {
-      setContactColumns(['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Email Address']);
+      setContactColumns(['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Email Address']);
     } else if (value === 'Phone') {
-      setContactColumns(['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone']);
+      setContactColumns(['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone']);
     }
   };
 
@@ -302,8 +400,8 @@ const ExportDataBoxUserA = ({
       handler: () => setIsPopoverOpen(false),
     });
 
-    const allContactColumns = ["tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" ]
-    const allCompanyColumns = ['tbl_zoominfo_company_paid_id',	'ZoomInfo Company ID',	'Company Name',	'Website',	'Founded Year',	'Company HQ Phone']
+    // const allContactColumns = ["tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" ]
+    // const allCompanyColumns = ['tbl_zoominfo_company_paid_id',	'ZoomInfo Company ID',	'Company Name',	'Website',	'Founded Year',	'Company HQ Phone']
 
 
     
@@ -535,6 +633,12 @@ const ExportDataBoxUserA = ({
                 >
                   Match Company Name
                 </Checkbox>
+                <Checkbox
+                  isChecked={matchZICompanyID}
+                  onChange={() => setmatchZICompanyID(!matchZICompanyID)}
+                >
+                  Match ZoomInfo Company ID
+                </Checkbox>
               </VStack>
             </FormControl>
               </>
@@ -586,25 +690,111 @@ const ExportDataBoxUserA = ({
                 >
                   Match ZoomInfo Contact ID
                 </Checkbox>
+                <Checkbox
+                  isChecked={matchZICompanyID}
+                  onChange={() => setmatchZICompanyID(!matchZICompanyID)}
+                >
+                  Match ZoomInfo Company ID
+                </Checkbox>
+                <Checkbox
+                  isChecked={matchCompanyName}
+                  onChange={() => setMatchCompanyName(!matchCompanyName)}
+                >
+                  Match Company Name
+                </Checkbox>
               </VStack>
             </FormControl>
               </>
             )}
             
             
-            <Button size="md" // Use "md" for a more standard size
-                      bgGradient={gradientBg}
-                      color="white"
-                      _hover={{ bgGradient: hoverBg }}
-                      _active={{ bgGradient: hoverBg }}
-                      borderRadius="full"
-                      boxShadow="md"
-                      px={6} // Set horizontal padding
-                      py={3} // Set vertical padding
-                      maxW="225"
-                      onClick={handleExportSubmit} isDisabled={exportloading}>
-              {exportloading ? <Spinner size="sm" /> : `Export ${ExporttableType} Data`}
+            <Button
+      size="md"
+      bgGradient={gradientBg}
+      color="white"
+      _hover={{ bgGradient: hoverBg }}
+      _active={{ bgGradient: hoverBg }}
+      borderRadius="full"
+      boxShadow="md"
+      px={6}
+      py={3}
+      maxW="225"
+      onClick={handleExportSubmit}
+      isDisabled={exportloading}
+    >
+      {exportloading ? <Spinner size="sm" /> : `Export ${ExporttableType} Data`}
+    </Button>
+
+    {isModalOpen && (
+      <Modal onClose={() => setIsModalOpen(false)} isOpen={isModalOpen} size="lg">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Map Columns</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Box as="form" pt={4}>
+              <VStack spacing={6} align="stretch">
+                {requiredColumns.map((requiredColumn) => {
+                  const usedColumns = Object.values(mappedColumns).filter(
+                    (value) => value && value !== mappedColumns[requiredColumn]
+                  );
+
+                  const availableColumns = excelColumns.filter(
+                    (col) => !usedColumns.includes(col)
+                  );
+
+                  return (
+                    <Flex key={requiredColumn} alignItems="center">
+                      {/* Required column on the left */}
+                      <Box w="40%" pr={4}>
+                        <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">
+                          {requiredColumn}
+                        </FormLabel>
+                      </Box>
+
+                      {/* Dropdown for excelColumns on the right */}
+                      <Box w="60%">
+                        <Select
+                          placeholder="Select a column"
+                          size="md"
+                          bg="white"
+                          value={mappedColumns[requiredColumn] || ""}
+                          onChange={(e) =>
+                            setMappedColumns((prev) => ({
+                              ...prev,
+                              [requiredColumn]: e.target.value,
+                            }))
+                          }
+                        >
+                          {availableColumns.map((col) => (
+                            <option key={col} value={col}>
+                              {col}
+                            </option>
+                          ))}
+                        </Select>
+                      </Box>
+                    </Flex>
+                  );
+                })}
+              </VStack>
+            </Box>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              colorScheme="blue"
+              mr={3}
+              onClick={handleMappingSubmit}
+              isDisabled={!Object.keys(mappedColumns).length}
+            >
+              Next
             </Button>
+            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
+              Cancel
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    )}
           </Stack>
         </Box>
          {/* Results Modal */}
@@ -620,10 +810,7 @@ const ExportDataBoxUserA = ({
       gradientBg={gradientBg}
       hoverBg={hoverBg}
       selectedOption={selectedOption}
-      allContactColumns={allContactColumns}
       selectedColumns={selectedColumns}
-      allCompanyColumns={allCompanyColumns}
-      ExporttableType={ExporttableType}
     />
   </>
   );

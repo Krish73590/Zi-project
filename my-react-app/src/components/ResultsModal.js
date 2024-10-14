@@ -30,8 +30,7 @@ const ResultsModal = ({
   handlePageChange,
   handleExport,
   gradientBg,
-  hoverBg,
-  ExporttableType
+  hoverBg
 }) => {
 
   // Function to get all unique columns from matches (results)

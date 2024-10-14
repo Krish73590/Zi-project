@@ -183,16 +183,18 @@ async def upload_file_user_a(
     match_company_domain: bool = Form(False),
     match_linkedin_url: bool = Form(False),
     match_zi_contact_id: bool = Form(False),
+    match_zi_company_id: bool = Form(False),
     match_company_name: bool = Form(False),
+    column_mapping: str = Form(...),
     db: Session = Depends(get_db)
 ):  
     if table_type == TableType.contact:
         return await process_upload(
-            file, selected_columns, match_contact_only_domain, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
+            file, selected_columns, match_contact_only_domain, match_contact_domain, match_linkedin_url, match_zi_contact_id, match_zi_company_id, match_company_name, column_mapping, db
         )
     elif table_type == TableType.company:
         return await process_company_upload(
-            file, selected_columns, match_company_domain, match_company_name, db
+            file, selected_columns, match_company_domain, match_company_name, match_zi_company_id, column_mapping, db
         )
 
 # File Upload Endpoint for User B
@@ -206,16 +208,18 @@ async def upload_file_user_b(
     match_company_domain: bool = Form(False),
     match_linkedin_url: bool = Form(False),
     match_zi_contact_id: bool = Form(False),
+    match_zi_company_id: bool = Form(False),
     match_company_name: bool = Form(False),
+    column_mapping: str = Form(...),
     db: Session = Depends(get_db)
 ):
     if table_type == TableType.contact:
         return await process_upload(
-            file, selected_columns,match_contact_only_domain, match_contact_domain, match_linkedin_url, match_zi_contact_id, db
+            file, selected_columns,match_contact_only_domain, match_contact_domain, match_linkedin_url, match_zi_contact_id, match_zi_company_id, match_company_name, column_mapping, db
         )
     elif table_type == TableType.company:
         return await process_company_upload(
-            file, selected_columns, match_company_domain, match_company_name, db
+            file, selected_columns, match_company_domain, match_company_name, match_zi_company_id, column_mapping, db
         )
 import math
 
@@ -252,29 +256,69 @@ async def process_upload(
     match_domain: bool,
     match_linkedin_url: bool,
     match_zi_contact_id: bool,
+    match_zi_company_id: bool,
+    match_company_name: bool,
+    column_mapping: dict[str, str],
     db: Session  # Assuming this is a SQLAlchemy session
 ):  
     filename = file.filename
     employee_id = employee_id_store.get('employee_id')
+    # employee_id = 'T01294'
     employee_role_py = employee_role_store.get('employee_role')
     
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found. Please log in again."}, status_code=400)
-
+    # Step 1: Parse column_mapping JSON string into a dictionary
+    try:
+        column_mapping_dict = json.loads(column_mapping)  # Convert JSON string to dict
+        print(column_mapping_dict)
+    except json.JSONDecodeError:
+        return JSONResponse(
+            content={"error": "Invalid column mapping format. Please provide a valid JSON object."},
+            status_code=400
+        )
+        
     # Step 1: Read and Validate Excel File
     try:
         df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
         df = df.where(pd.notnull(df), None)
+        df.rename(columns=column_mapping_dict, inplace=True)
+        df = df.map(lambda x: str(int(x)) if isinstance(x, (int, float)) and not pd.isnull(x) else str(x))
+        
         if 'zi_contact_id' in df.columns:
             df['zi_contact_id'] = df['zi_contact_id'].astype(str)
+        if 'zi_company_id' in df.columns:
+            df['zi_company_id'] = df['zi_company_id'].astype(str)
     except Exception as e:
         logger.error(f"Error reading the uploaded file '{filename}': {e}")
         return JSONResponse(content={"error": "Failed to read the uploaded file. Ensure it is a valid Excel file."}, status_code=400)
 
-    # Step 2: Validate Required Columns
-    required_columns = ['domain', 'first_name', 'last_name', 'linkedin_url', 'zi_contact_id']
+    # Step 2: Determine Required Columns Based on Matching Criteria
+    required_columns = set()
+
+    # Add required columns based on the matching criteria selected
+    if match_only_domain:
+        required_columns.add('domain')
+    if match_domain:
+        required_columns.update(['domain', 'first_name', 'last_name'])
+    if match_linkedin_url:
+        required_columns.add('linkedin_url')
+    if match_zi_contact_id:
+        required_columns.add('zi_contact_id')
+    if match_zi_company_id:
+        required_columns.add('zi_company_id')
+    if match_company_name:
+        required_columns.add('company_name')
+
+    # Check if at least one matching criterion is selected
+    if not required_columns:
+        return JSONResponse(
+            content={"error": "No matching criteria selected. Please select at least one matching criterion."},
+            status_code=400
+        )
+    # Validate that the required columns are present in the uploaded file
     missing_columns = [col for col in required_columns if col not in df.columns]
-    
+
     if missing_columns:
         return JSONResponse(
             content={"error": f"The uploaded file is missing the following required columns: {', '.join(missing_columns)}."},
@@ -320,6 +364,12 @@ async def process_upload(
         return JSONResponse(content={"error": "Failed to insert data into the temporary table. Please verify the data and try again."}, status_code=400)
     
     # Step 6: Build and Execute Join Query
+    if not any([match_only_domain, match_domain, match_linkedin_url, match_zi_contact_id, match_zi_company_id, match_company_name]):
+        return JSONResponse(
+            content={"error": "No matching criteria selected. Please select at least one matching criterion."},
+            status_code=400
+        )
+        
     try:
         conditions = []
         if match_only_domain:
@@ -334,6 +384,10 @@ async def process_upload(
             conditions.append("TRIM(main.\"LinkedIn Contact Profile URL\") = TRIM(staging.linkedin_url)")
         if match_zi_contact_id:
             conditions.append("TRIM(main.\"ZoomInfo Contact ID\") = TRIM(staging.zi_contact_id)")
+        if match_zi_company_id:
+            conditions.append("TRIM(main.\"ZoomInfo Company ID\") = TRIM(staging.zi_company_id)")
+        if match_company_name:
+            conditions.append("TRIM(main.\"Company Name\") = TRIM(staging.company_name)")
         if not conditions:
             conditions.append("0=1")  # No conditions provided
         
@@ -359,12 +413,21 @@ async def process_upload(
         """
         
         result_frontend = connection.execute(text(query))
-        results = [dict(row._mapping) for row in result_frontend]
+        results_with_old_headers = [dict(row._mapping) for row in result_frontend]
         
+        # Step 7: Reverse the Column Mapping and Restore Original Headers
+        reversed_column_mapping = {v: k for k, v in column_mapping_dict.items()}  # Reverse the mapping
+        
+        results = [
+            {reversed_column_mapping.get(col, col): value for col, value in row.items()}
+            for row in results_with_old_headers
+        ]
         # Clean 'zi_contact_id' if necessary
         for result in results:
             if result.get('zi_contact_id') == 'nan':
                 result['zi_contact_id'] = None
+            if result.get('zi_company_id') == 'nan':
+                result['zi_company_id'] = None
     except SQLAlchemyError as e:
         logger.error(f"Error executing join query on temporary table '{staging_table_name}': {e}")
         return JSONResponse(content={"error": "Failed to process data matching. Please check your selection criteria and try again."}, status_code=400)
@@ -381,9 +444,9 @@ async def process_upload(
             
             # Determine process tag based on selected columns and user role
             selected_set = set(selected_columns)
-            if selected_set == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
+            if selected_set == {'Email Address', 'LinkedIn Contact Profile URL', 'Website', 'ZoomInfo Contact ID', 'Company Name', 'ZoomInfo Company ID', 'First Name', 'Last Name'} and employee_role_py == 'user_a':
                 process_tag_new = 'Export - Email'
-            elif selected_set == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
+            elif selected_set == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
                 process_tag_new = 'Export - Phone'
             elif employee_role_py == 'user_b':
                 process_tag_new = 'Export - All'
@@ -460,6 +523,8 @@ async def process_company_upload(
     selected_columns: str,
     match_domain: bool,
     match_company_name: bool,
+    match_zi_company_id: bool,
+    column_mapping: dict[str, str],
     db: Session
 ):
     filename = file.filename
@@ -469,12 +534,47 @@ async def process_company_upload(
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
     
-    # Read Excel file into DataFrame
-    df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
-    df = df.where(pd.notnull(df), None)
+    # Step 1: Parse column_mapping JSON string into a dictionary
+    try:
+        column_mapping_dict = json.loads(column_mapping)  # Convert JSON string to dict
+        # print(column_mapping_dict)
+    except json.JSONDecodeError:
+        return JSONResponse(
+            content={"error": "Invalid column mapping format. Please provide a valid JSON object."},
+            status_code=400
+        )
+        
+    # Step 1: Read and Validate Excel File
+    try:
+            # Read Excel file into DataFrame
+        df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+        df = df.where(pd.notnull(df), None)
+        df.rename(columns=column_mapping_dict, inplace=True)
+        df = df.map(lambda x: str(int(x)) if isinstance(x, (int, float)) and not pd.isnull(x) else str(x))
+
+        if 'zi_company_id' in df.columns:
+            df['zi_company_id'] = df['zi_company_id'].astype(str)
+        
+        # print(df.head())
+    except Exception as e:
+        logger.error(f"Error reading the uploaded file '{filename}': {e}")
+        return JSONResponse(content={"error": "Failed to read the uploaded file. Ensure it is a valid Excel file."}, status_code=400)
+        
+
     
+    # Step 2: Determine Required Columns Based on Matching Criteria
+    required_columns = set()
+
+    # Add required columns based on the matching criteria selected
+    if match_domain:
+        required_columns.add('domain')
+    if match_company_name:
+        required_columns.add('company_name')
+    if match_zi_company_id:
+        required_columns.add('zi_company_id')
+        
     # Define mandatory columns
-    required_columns = ['domain', 'company_name']
+    # required_columns = ['domain', 'company_name']
     if not all(col in df.columns for col in required_columns):
         return JSONResponse(content={"error": "Missing required columns in the uploaded file."}, status_code=400)
 
@@ -514,6 +614,8 @@ async def process_company_upload(
             conditions.append(f"REPLACE (REPLACE (REPLACE (REPLACE (REPLACE (LOWER(main.\"Website\"),'https://',''),'https:/',''),'http://',''),'www.',''),'www','') = staging.domain")
         if match_company_name:
             conditions.append("TRIM(LOWER(REPLACE(main.\"Company Name\",'''',' '))) = TRIM(LOWER(REPLACE(staging.company_name,'''',' ')))")
+        if match_zi_company_id:
+            conditions.append("TRIM(main.\"ZoomInfo Company ID\") = TRIM(staging.zi_company_id)::text")
         if not conditions:
             conditions.append("0=1")
 
@@ -545,10 +647,18 @@ async def process_company_upload(
         
         # print(query)
         # Execute the query and get the Result object
+        # result_frontend = connection.execute(text(query))
         result_frontend = connection.execute(text(query))
-
-        # Process the results
-        results = [dict(row._mapping) for row in result_frontend]
+        # print(result_frontend)
+        results_with_old_headers = [dict(row._mapping) for row in result_frontend]
+        # print(results_with_old_headers)
+        # Step 7: Reverse the Column Mapping and Restore Original Headers
+        reversed_column_mapping = {v: k for k, v in column_mapping_dict.items()}  # Reverse the mapping
+        
+        results = [
+            {reversed_column_mapping.get(col, col): value for col, value in row.items()}
+            for row in results_with_old_headers
+        ]
 
         # Process results for backend logging
         if results:
@@ -563,7 +673,7 @@ async def process_company_upload(
             
             df_export = pd.DataFrame()
             
-            new_cols = required_columns + selected_columns_ordered
+            new_cols = list(required_columns) + selected_columns_ordered
             
             # Create a dictionary for all selected columns with their respective values from results
             column_data = {column: [result.get(column, None) for result in results] for column in new_cols}
