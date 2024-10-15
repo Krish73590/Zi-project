@@ -387,6 +387,9 @@ const handleMappingSubmit = async () => {
     } else if (value === 'Phone') {
       setContactColumns(['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone']);
     }
+    else if (value === 'EmailPhone'){
+      setContactColumns(['ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Email Address', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone']);
+    }
   };
 
   useEffect(() => {
@@ -722,6 +725,7 @@ const handleMappingSubmit = async () => {
                     <Stack spacing={4}>
                       <Radio value="Email">Email</Radio>
                       <Radio value="Phone">Phone</Radio>
+                      <Radio value="EmailPhone">Email & Phone</Radio>
                     </Stack>
                   </RadioGroup>
                 </FormControl>

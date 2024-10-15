@@ -1,7 +1,9 @@
+import csv
 import io
 import os
 from fastapi import FastAPI, File, Query, UploadFile, Form, Depends, HTTPException
 from fastapi.responses import JSONResponse
+import openpyxl
 import psycopg2
 from sqlalchemy import JSON, DateTime, Integer, create_engine, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
@@ -30,6 +32,7 @@ import urllib.parse
 import uuid
 from sqlalchemy import Table, Column, String, MetaData, text
 from sqlalchemy.exc import SQLAlchemyError
+from collections import defaultdict
 
 # Custom JSON encoder to handle datetime objects
 class DateTimeEncoder(json.JSONEncoder):
@@ -248,6 +251,64 @@ import logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
+# Step 1: Define the restore_original_name function
+def restore_original_name(alias):
+    """Remove 'main_' or 'staging_' prefix from column names."""
+    if alias.startswith("main_"):
+        return alias[5:]
+    elif alias.startswith("staging_"):
+        return alias[8:]
+    return alias
+
+def handle_duplicates(row):
+    """Handle duplicates within a single row."""
+    seen = defaultdict(int)  # Track counts for each original column
+    new_row = {}  # Store the final row with adjusted column names
+
+    for col, value in row.items():
+        original_col = restore_original_name(col)  # Restore original column name
+
+        if seen[original_col] > 0:
+            # Add a suffix for subsequent occurrences (starting from 1)
+            new_col_name = f"{original_col}_{seen[original_col]}_db"
+        else:
+            new_col_name = original_col  # First occurrence, no suffix
+
+        new_row[new_col_name] = value  # Add column to the new row
+        seen[original_col] += 1  # Increment counter for next occurrence
+
+    return new_row
+
+def reverse_mapping_with_duplicates(rows, column_mapping):
+    """Reverse map columns and handle duplicates."""
+    reversed_column_mapping = {v: k for k, v in column_mapping.items()}  # Reverse mapping
+
+    results = []
+    for row in rows:
+        new_row = {}
+        for col, value in row.items():
+            # Get the original column name or use the existing one
+            original_name = reversed_column_mapping.get(col, col)
+
+            # Use the handle_duplicates logic to manage duplicates correctly
+            handle_duplicate_column_name(new_row, original_name, value)
+
+        results.append(new_row)
+
+    return results
+
+def handle_duplicate_column_name(new_row, original_name, value):
+    """Add suffix if column name already exists within the same row."""
+    if original_name in new_row:
+        counter = 1
+        new_name = f"{original_name}_{counter}"
+        # Keep incrementing until a unique name is found
+        while new_name in new_row:
+            counter += 1
+            new_name = f"{original_name}_{counter}"
+        new_row[new_name] = value  # Assign value to the new column name
+    else:
+        new_row[original_name] = value  # No conflict, assign value directly
 
 async def process_upload(
     file: UploadFile,
@@ -403,25 +464,23 @@ async def process_upload(
         ordered_columns = [row[0] for row in connection.execute(text(db_columns_query))]
         selected_columns_clean = [col.strip('"') for col in selected_columns]
         selected_columns_ordered = [col for col in ordered_columns if col in selected_columns_clean]
-        select_columns = ', '.join(f"main.\"{col}\"" for col in selected_columns_ordered) or '*'
-        staging_columns = ', '.join(f"staging.\"{col}\" AS \"{col}\" " for col in df.columns)
+        select_columns = ', '.join(f"main.\"{col}\"  AS \"main_{col}\"" for col in selected_columns_ordered) or '*'
+        staging_columns = ', '.join(f"staging.\"{col}\" AS \"staging_{col}\" " for col in df.columns)
         
         query = f"""
             SELECT DISTINCT {staging_columns}, {select_columns}
             FROM tbl_zoominfo_contact_paid AS main
             INNER JOIN {staging_table_name} staging ON {where_clause}
         """
-        
+        # print(query)
         result_frontend = connection.execute(text(query))
-        results_with_old_headers = [dict(row._mapping) for row in result_frontend]
+        results_with_aliases = [dict(row._mapping) for row in result_frontend]
+
         
-        # Step 7: Reverse the Column Mapping and Restore Original Headers
-        reversed_column_mapping = {v: k for k, v in column_mapping_dict.items()}  # Reverse the mapping
-        
-        results = [
-            {reversed_column_mapping.get(col, col): value for col, value in row.items()}
-            for row in results_with_old_headers
-        ]
+        results_with_old_headers = [handle_duplicates(row) for row in results_with_aliases]
+        results = reverse_mapping_with_duplicates(results_with_old_headers, column_mapping_dict)
+
+            
         # Clean 'zi_contact_id' if necessary
         for result in results:
             if result.get('zi_contact_id') == 'nan':
@@ -448,6 +507,8 @@ async def process_upload(
                 process_tag_new = 'Export - Email'
             elif selected_set == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
                 process_tag_new = 'Export - Phone'
+            elif selected_set == {'ZoomInfo Contact ID', 'First Name', 'Last Name', 'Website', 'LinkedIn Contact Profile URL', 'Company Name', 'ZoomInfo Company ID', 'Email Address', 'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'} and employee_role_py == 'user_a':
+                process_tag_new = 'Export - Email & Phone'
             elif employee_role_py == 'user_b':
                 process_tag_new = 'Export - All'
             else:
@@ -472,6 +533,14 @@ async def process_upload(
                     (df_records['Mobile phone'].notna() & (df_records['Mobile phone'] != '')) |
                     (df_records['Direct Phone Number'].notna() & (df_records['Direct Phone Number'] != '')) |
                     (df_records['Company HQ Phone'].notna() & (df_records['Company HQ Phone'] != ''))
+                ]
+            elif process_tag_new == 'Export - Email & Phone':
+                # Keep records where at least one of the phone columns is non-blank
+                df_records = df_records[
+                    (df_records['Mobile phone'].notna() & (df_records['Mobile phone'] != '')) |
+                    (df_records['Direct Phone Number'].notna() & (df_records['Direct Phone Number'] != '')) |
+                    (df_records['Company HQ Phone'].notna() & (df_records['Company HQ Phone'] != '')) |
+                    (df_records['Email Address'].notna() & (df_records['Email Address'] != ''))
                 ]
             df_records['data_json'] = df_records.apply(lambda row: json.dumps(row.to_dict(), cls=DateTimeEncoder), axis=1)
             df_log = pd.DataFrame({
@@ -649,17 +718,12 @@ async def process_company_upload(
         # Execute the query and get the Result object
         # result_frontend = connection.execute(text(query))
         result_frontend = connection.execute(text(query))
-        # print(result_frontend)
-        results_with_old_headers = [dict(row._mapping) for row in result_frontend]
-        # print(results_with_old_headers)
-        # Step 7: Reverse the Column Mapping and Restore Original Headers
-        reversed_column_mapping = {v: k for k, v in column_mapping_dict.items()}  # Reverse the mapping
-        
-        results = [
-            {reversed_column_mapping.get(col, col): value for col, value in row.items()}
-            for row in results_with_old_headers
-        ]
+        results_with_aliases = [dict(row._mapping) for row in result_frontend]
 
+        
+        results_with_old_headers = [handle_duplicates(row) for row in results_with_aliases]
+        results = reverse_mapping_with_duplicates(results_with_old_headers, column_mapping_dict)
+            
         # Process results for backend logging
         if results:
                         # Get the current time in GMT
@@ -771,17 +835,42 @@ COMPANY_TEMPLATE = [
 from sqlalchemy.exc import IntegrityError
 from urllib.parse import quote, unquote
 
+# Helper function to extract headers from Excel files
+def extract_excel_headers(file_stream):
+    workbook = openpyxl.load_workbook(file_stream, read_only=True)
+    sheet = workbook.active  # Get the first sheet
+    headers = [cell.value for cell in next(sheet.iter_rows(max_row=1))]
+    return headers
+
+# Helper function to extract headers from CSV files
+def extract_csv_headers(file_stream):
+    file_stream.seek(0)  # Reset stream position
+    reader = csv.reader(io.TextIOWrapper(file_stream, encoding='utf-8'))
+    headers = next(reader)  # Read the first row as headers
+    return headers
+
 @app.post("/import/")
 async def import_data(
     table_type: TableType = Form(...),  # Use TableType enum to restrict input
-    files: List[UploadFile] = File(...),
+    column_mapping: str = Form(...),
+    # files: List[UploadFile] = File(...),
+    file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):  
-    employee_id = employee_id_store.get('employee_id')
-    # employee_id = 'E00860'
+    # employee_id = employee_id_store.get('employee_id')
+    employee_id = 'E00860'
     if not employee_id:
         return JSONResponse(content={"error": "Employee ID not found."}, status_code=400)
 
+    try:
+        column_mapping_dict = json.loads(column_mapping)  # Convert JSON string to dict
+        # print(column_mapping_dict)
+    except json.JSONDecodeError:
+        return JSONResponse(
+            content={"error": "Invalid column mapping format. Please provide a valid JSON object."},
+            status_code=400
+        )
+        
     # Set the table and template based on the type
     if table_type == TableType.company:
         table_name = 'tbl_zoominfo_company_paid'
@@ -796,97 +885,125 @@ async def import_data(
     file_messages = []
 
     try:
-        for file in files:
-            if file.filename == '':
-                continue
+        # for file in files:
+        if file.filename == '':
+            file_messages.append(f"File '{file.filename}': Invalid file name.")
+        file_content = await file.read()
+        file_stream = io.BytesIO(file_content)
+        # **Extract headers based on the file type**
+        if file.filename.endswith('.xlsx'):
+            headers = extract_excel_headers(file_stream)
+        elif file.filename.endswith('.csv'):
+            headers = extract_csv_headers(file_stream)
+        else:
+            return JSONResponse(
+                content={"error": "Upload either .xlsx or .csv file."}, status_code=400
+            )
 
-            file_content = await file.read()
-            file_stream = io.BytesIO(file_content)
+        # **Check for duplicate headers**
+        duplicate_headers = [header for header in headers if headers.count(header) > 1]
+        if duplicate_headers:
+            unique_duplicates = list(set(duplicate_headers))
+            return JSONResponse(
+                content={
+                    "error": f"Duplicate columns found: {', '.join(unique_duplicates)}"
+                },
+                status_code=400
+            )
+        
+        
 
-            if file.filename.endswith('.xlsx'): 
-                data = pd.read_excel(file_stream, engine='openpyxl')    
-            elif file.filename.endswith('.csv'):    
-                data = pd.read_csv(file_stream, encoding='utf-8', dtype=str)
-            else:
-                continue
+        if file.filename.endswith('.xlsx'): 
+            data = pd.read_excel(file_stream, engine='openpyxl')
+            data = data.where(pd.notnull(data), None)
+        elif file.filename.endswith('.csv'):    
+            data = pd.read_csv(file_stream, encoding='utf-8', dtype=str)
+            data = data.where(pd.notnull(data), None)
+            # print(data.head())
+        else:
+            return JSONResponse(
+                content={
+                    "error": f"File '{file.filename}': Upload either xlsx or csv file."
+                },
+                status_code=400
+            )
+        
+        
+        # Clean and strip whitespace from column names
+        data.columns = [col.strip() for col in data.columns]
 
-            # Clean data and filter columns to match expected columns
-            data.columns = [col.strip() for col in data.columns]
-            missing_columns = set(expected_columns) - set(data.columns)
-            if missing_columns:
-                return JSONResponse(
-                    content={"error": f"Missing columns: {', '.join(missing_columns)}"},
-                    status_code=400
+        # Clean data and filter columns to match expected columns
+        data.columns = [col.strip() for col in data.columns]
+        # print(column_mapping_dict)
+        mapped_columns = set(column_mapping_dict.keys())  # Mapped column names
+        data = data[[col for col in mapped_columns if col in data.columns]]  # Filter columns
+        data.rename(columns=column_mapping_dict, inplace=True) 
+        data['db_file_name'] = file.filename
+        data = data.where(pd.notna(data), None)  # Replace NaNs with None
+        
+        try:
+            # Insert data using pandas' to_sql for batch processing
+            data.to_sql(
+                table_name,
+                db.get_bind(),
+                if_exists='append',  # Append to the existing table
+                index=False,  # We don't need to add the dataframe index as a column
+                method='multi',  # Batch insert
                 )
+            db.commit()
 
-            # Since the primary key is not in the template, we'll let the database handle it automatically
-            # Insert the data into the database without the primary key
-            data = data.where(pd.notna(data), None)  # Replace NaNs with None
-            
-            try:
-                # Insert data using pandas' to_sql for batch processing
-                data.to_sql(
-                    table_name,
-                    db.get_bind(),
-                    if_exists='append',  # Append to the existing table
-                    index=False,  # We don't need to add the dataframe index as a column
-                    method='multi',  # Batch insert
-                    )
-                db.commit()
+            records_inserted = len(data)
+            total_records_inserted += records_inserted
+            file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
+        
+        except IntegrityError as e:
+            # Handle primary key or unique constraint violation
+            print(f"Error occurred: {e}")
+            db.rollback()
+            file_messages.append(f"File '{file.filename}': Error inserting data - {str(e)}")
 
-                records_inserted = len(data)
-                total_records_inserted += records_inserted
-                file_messages.append(f"File '{file.filename}': {records_inserted} records inserted.")
-            
-            except IntegrityError as e:
-                # Handle primary key or unique constraint violation
-                print(f"Error occurred: {e}")
-                db.rollback()
-                file_messages.append(f"File '{file.filename}': Error inserting data - {str(e)}")
-                continue
+                                # Get the current time in GMT
+        gmt_plus_5_30 = pytz.timezone('Asia/Kolkata')
 
-                                    # Get the current time in GMT
-            gmt_plus_5_30 = pytz.timezone('Asia/Kolkata')
+        # Get the current time in GMT+5:30
+        process_time = datetime.now(pytz.utc).astimezone(gmt_plus_5_30)
 
-            # Get the current time in GMT+5:30
-            process_time = datetime.now(pytz.utc).astimezone(gmt_plus_5_30)
+        # Format the time as a string (e.g., 'YYYY-MM-DD HH:MM:SS')
+        formatted_process_time = process_time.strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            # Convert each record to a log entry
+            for idx, record in data.iterrows():
+                metadata = {
+                    'employee_id': employee_id,
+                    'process_time': formatted_process_time,
+                    'file_name': file.filename,
+                    'process_tag': 'Import',
+                    'counts': len(data),  # Each log entry is for a single record
+                    'data_json': json.dumps(record.to_dict())  # Store each record as JSON
+                }
 
-            # Format the time as a string (e.g., 'YYYY-MM-DD HH:MM:SS')
-            formatted_process_time = process_time.strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                # Convert each record to a log entry
-                for idx, record in data.iterrows():
-                    metadata = {
-                        'employee_id': employee_id,
-                        'process_time': formatted_process_time,
-                        'file_name': file.filename,
-                        'process_tag': 'Import',
-                        'counts': len(data),  # Each log entry is for a single record
-                        'data_json': json.dumps(record.to_dict())  # Store each record as JSON
+                df_log = pd.DataFrame([metadata])
+
+                # Insert each log entry for the corresponding record
+                df_log.to_sql(
+                    log_table_name, 
+                    db.get_bind(), 
+                    if_exists='append', 
+                    index=False, 
+                    dtype={
+                        'employee_id': String,
+                        'process_time': DateTime,
+                        'file_name': String,
+                        'process_tag': String,
+                        'counts': Integer,
+                        'data_json': JSON  # Use JSON or JSONB depending on your database
                     }
-
-                    df_log = pd.DataFrame([metadata])
-
-                    # Insert each log entry for the corresponding record
-                    df_log.to_sql(
-                        log_table_name, 
-                        db.get_bind(), 
-                        if_exists='append', 
-                        index=False, 
-                        dtype={
-                            'employee_id': String,
-                            'process_time': DateTime,
-                            'file_name': String,
-                            'process_tag': String,
-                            'counts': Integer,
-                            'data_json': JSON  # Use JSON or JSONB depending on your database
-                        }
-                    )
-                db.commit()
-            except Exception as e:
-                print(f"An error occurred while inserting log records: {e}")
-                db.rollback()
-                return JSONResponse(content={"error": str(e)}, status_code=500)
+                )
+            db.commit()
+        except Exception as e:
+            print(f"An error occurred while inserting log records: {e}")
+            db.rollback()
+            return JSONResponse(content={"error": str(e)}, status_code=500)
 
     except Exception as e:
         db.rollback()

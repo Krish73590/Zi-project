@@ -20,10 +20,7 @@ import AuthContext from './AuthContext';
 import { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 const Platform = () => {
-  const [importloading, setimportLoading] = useState(false);
-  const [importFile, setImportFile] = useState(null);
   const toast = useToast();
-  const [ImporttableType, setImportTableType] = useState('Company');
   const [logtableType, setlogTableType] = useState('Company');
   const [activities, setActivities] = useState([]);
   const { user, logout } = useContext(AuthContext);
@@ -35,41 +32,6 @@ const Platform = () => {
   };
   
 
-  const contactImportHeaders  = [
-    "ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations"
-   ]; 
-   
-   const companyImportHeaders = [
-     "ZoomInfo Company ID","Company Name","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Employees","Employee Range","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Defunct Company","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Company Is Acquired","Company ID (Ultimate Parent)","Entity Name (Ultimate Parent)","Company ID (Immediate Parent)","Entity Name (Immediate Parent)","Relationship (Immediate Parent)"
-   ];
-
-    const handleImportDownload = () => {
-      let headers;
-      if (ImporttableType === 'Contact') {
-        headers = contactImportHeaders;
-      } else if (ImporttableType === 'Company') {
-        headers = companyImportHeaders;
-      } 
-
-      // const headers = ImporttableType === 'Contact' ? contactHeaders : companyHeaders;
-      const csvRows = [];
-      const headersRow = headers.join(',');
-      csvRows.push(headersRow);
-  
-      const csvString = csvRows.join('\n');
-      const blob = new Blob([csvString], { type: 'text/csv' });
-      saveAs(blob, `${ImporttableType}_import_sample_headers.csv`);
-      
-      toast({
-        title: 'Download Started',
-        description: 'Sample headers CSV file is being downloaded.',
-        status: 'info',
-        duration: 2000,
-        isClosable: true,
-      });
-    };
-
-  
   useEffect(() => {
     // console.log(`Fetching data for tableType: ${logtableType}`);
     axios.get(`${process.env.REACT_APP_API_URL}/user/last-activities/?table_type=${logtableType}`)
@@ -136,76 +98,7 @@ const Platform = () => {
     setlogTableType(tabValues[index]);
   };
 
-  const handleImportTabChange = (index) => {
-    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
-    setImportTableType(tabValues[index]);
-  };
 
-
-
-  const handleImportFileChange = (e) => setImportFile(e.target.files[0]);
-  const handleImportSubmit = async () => {
-    if (!importFile) {
-      toast({
-        title: 'Error',
-        description: 'Please upload a file for import.',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-      return;
-    }
-
-    const formData = new FormData();
-    formData.append('files', importFile);
-    formData.append('table_type', ImporttableType);
-
-    setimportLoading(true);
-    try {
-      const response = await axios.post(`${process.env.REACT_APP_API_URL}/import/`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      toast({
-        title: 'Success',
-        description: response.data.message,
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      });
-    } catch (error) {
-      console.error('Error importing data:', error);
-      // Extract and display specific error messages
-      if (error.response) {
-        toast({
-          title: 'Import Error',
-          description: error.response.data.error || 'Failed to import data.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } else if (error.request) {
-        toast({
-          title: 'Network Error',
-          description: 'No response from the server. Please check your connection.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      } else {
-        toast({
-          title: 'Error',
-          description: 'An unexpected error occurred during data import.',
-          status: 'error',
-          duration: 5000,
-          isClosable: true,
-        });
-      }
-    } finally {
-      setimportLoading(false);
-    }
-  };
 
   const boxBg = useColorModeValue("white", "gray.800");
 
@@ -235,12 +128,6 @@ const Platform = () => {
       <VStack spacing={6} p={4} align="stretch">
         <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
         <ImportDataBox
-            handleImportTabChange={handleImportTabChange}
-            handleImportDownload={handleImportDownload}
-            handleImportFileChange={handleImportFileChange}
-            handleImportSubmit={handleImportSubmit}
-            importloading={importloading}
-            ImporttableType={ImporttableType}
             gradientBg={gradientBg}
             hoverBg={hoverBg}
             boxBg={boxBg}

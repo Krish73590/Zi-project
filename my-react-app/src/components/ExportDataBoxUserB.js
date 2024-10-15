@@ -35,7 +35,9 @@ import {
   ModalBody,
   Select,
   ModalFooter,
-  Flex  
+  Flex,
+  RadioGroup,
+  Radio, 
 } from '@chakra-ui/react';
 import { saveAs } from 'file-saver';
 import { ImDownload3 } from 'react-icons/im';
@@ -84,7 +86,8 @@ const ExportDataBoxUserB = ({
   const [excelColumns, setexcelColumns] = useState([]); 
   const [isModalOpen, setIsModalOpen] = useState(false); // For showing the modal
   const [mappedColumns, setMappedColumns] = useState({}); // For storing the user’s mapped columns
-  
+  const [radioValue, setRadioValue] = useState([]); 
+  const [initialMappedColumns, setInitialMappedColumns] = useState({}); // Track initial auto-mappings
 
 
 
@@ -143,7 +146,7 @@ const parseExcelFile = (file) => {
 };
 
 const stringSimilarity = (str1, str2) => {
-  const normalize = (str) => str.trim().toLowerCase().replace(/[\s_-]+/g, '');
+  const normalize = (str) => (typeof str === 'string' ? str.trim().toLowerCase().replace(/[\s_-]+/g, '') : '');
 
   const a = normalize(str1);
   const b = normalize(str2);
@@ -195,11 +198,9 @@ const handleExportSubmit = async () => {
     return;
   }
 
-  // Parse the Excel file to get the column headers
   const parsedColumns = await parseExcelFile(file);
   console.log('Parsed Columns:', parsedColumns);
 
-  // Define the required columns dynamically based on conditions
   let updatedRequiredColumns = [];
   if (matchContactOnlyDomain) updatedRequiredColumns.push('domain');
   if (matchContactDomain) updatedRequiredColumns.push('domain', 'first_name', 'last_name');
@@ -209,27 +210,21 @@ const handleExportSubmit = async () => {
   if (matchZICompanyID) updatedRequiredColumns.push('zi_company_id');
   if (matchCompanyName) updatedRequiredColumns.push('company_name');
 
-  // Remove duplicates from the required columns
   updatedRequiredColumns = [...new Set(updatedRequiredColumns)];
-
-  // Set the required and parsed columns in state (React state updates asynchronously)
   setrequiredColumns(updatedRequiredColumns);
   setexcelColumns(parsedColumns);
 
-  console.log('Required Columns:', updatedRequiredColumns);
-
-  // Initialize mapping
   const initialMapping = {};
 
   updatedRequiredColumns.forEach((reqCol) => {
-    const possibleMatches = predefinedColumnSets[reqCol] || [reqCol]; // Get possible names
+    const possibleMatches = predefinedColumnSets[reqCol] || [reqCol];
 
     let bestMatch = '';
     let highestSimilarity = 0;
 
     parsedColumns.forEach((excelCol) => {
       possibleMatches.forEach((altName) => {
-        const similarity = stringSimilarity(altName, excelCol);
+        const similarity = stringSimilarity(String(altName), String(excelCol));
         if (similarity > highestSimilarity) {
           highestSimilarity = similarity;
           bestMatch = excelCol;
@@ -237,20 +232,16 @@ const handleExportSubmit = async () => {
       });
     });
 
-    // Only map if similarity score is above a threshold (e.g., 0.8)
     if (highestSimilarity >= 0.8) {
       initialMapping[reqCol] = bestMatch;
     }
   });
 
-  console.log('Initial Mapping:', initialMapping);
-
-  // Ensure the mapping is correctly set in state
-  setMappedColumns(initialMapping);
-
-  // Open the modal for user review (after mapping is complete)
+  setMappedColumns(initialMapping); // Store current mappings
+  setInitialMappedColumns(initialMapping); // Store initial auto-mappings
   setIsModalOpen(true);
 };
+
 
 
 
@@ -344,6 +335,16 @@ const handleMappingSubmit = async () => {
     setMappedColumns([]);
     setrequiredColumns([]);
   }
+};
+
+const frontendColumnNames = {
+  domain: 'Domain',
+  first_name: 'First Name',
+  last_name: 'Last Name',
+  linkedin_url: 'LinkedIn URL',
+  zi_contact_id: 'ZoomInfo Contact ID',
+  zi_company_id: 'ZoomInfo Company ID',
+  company_name: 'Company Name',
 };
 
   const handleExportTabChange = (index) => {
@@ -726,6 +727,34 @@ const handleMappingSubmit = async () => {
         ) : (
           <>
             <FormControl>
+              <RadioGroup
+                value={radioValue} // Track which radio is selected
+                onChange={(value) => {
+                  setRadioValue(value);
+                  if (value === 'email') {
+                    setSelectedColumns([
+                      'ZoomInfo Contact ID', 'First Name', 'Last Name', 
+                      'Website', 'LinkedIn Contact Profile URL', 
+                      'Company Name', 'ZoomInfo Company ID', 'Email Address'
+                    ]);
+                  } else if (value === 'phone') {
+                    setSelectedColumns([
+                      'ZoomInfo Contact ID', 'First Name', 'Last Name', 
+                      'Website', 'LinkedIn Contact Profile URL', 
+                      'Company Name', 'ZoomInfo Company ID', 
+                      'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'
+                    ]);
+                  }
+                  setSelectAll(false);
+                  setUnselectAll(false);
+                }}
+              >
+                <Stack spacing={4} mb={4}>
+                  <Radio value="email">Email</Radio>
+                  <Radio value="phone">Phone</Radio>
+                  <Radio value="other">Other</Radio>
+                </Stack>
+              </RadioGroup>
               <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)}>
                 <PopoverTrigger>
                   <Button
@@ -768,6 +797,33 @@ const handleMappingSubmit = async () => {
                           setUnselectAll(false);
                           setSelectedColumns(values);
                         }
+                        setSelectedColumns(values);
+
+                      // Switch to "Other" if the selected columns don't match predefined sets
+                      const emailSet = new Set([
+                        'ZoomInfo Contact ID', 'First Name', 'Last Name', 
+                        'Website', 'LinkedIn Contact Profile URL', 
+                        'Company Name', 'ZoomInfo Company ID', 'Email Address'
+                      ]);
+
+                      const phoneSet = new Set([
+                        'ZoomInfo Contact ID', 'First Name', 'Last Name', 
+                        'Website', 'LinkedIn Contact Profile URL', 
+                        'Company Name', 'ZoomInfo Company ID', 
+                        'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'
+                      ]);
+
+                      if (
+                        values.length !== emailSet.size || 
+                        !values.every((val) => emailSet.has(val))
+                      ) {
+                        if (
+                          values.length !== phoneSet.size || 
+                          !values.every((val) => phoneSet.has(val))
+                        ) {
+                          setRadioValue('other');
+                        }
+                      }
                       }}
                     >
                       <Stack spacing={2}>
@@ -921,11 +977,39 @@ const handleMappingSubmit = async () => {
                 (col) => !usedColumns.includes(col)
               );
 
+              const initialValue = initialMappedColumns[requiredColumn]; // Initial auto-mapped value
+              const currentValue = mappedColumns[requiredColumn]; // Current value selected by the user
+
+              const isAutoMapped = !!initialValue;
+              const isModified = isAutoMapped && currentValue !== initialValue;
+              const isUserMapped = !isAutoMapped && !!currentValue;
+
+              let starColor = '';
+              if (isModified) starColor = 'orange';
+              else if (isUserMapped) starColor = 'green';
+              else if (isAutoMapped) starColor = '#3182ce';
+
+              const showStar = currentValue && currentValue !== '';
+
+              // Get the frontend-friendly column name
+              const displayName = frontendColumnNames[requiredColumn] || requiredColumn;
+
               return (
                 <Flex key={requiredColumn} alignItems="center">
                   <Box w="40%" pr={4}>
                     <FormLabel fontWeight="bold" fontSize="sm" color="gray.600">
-                      {requiredColumn}
+                      {displayName}
+                      {showStar && (
+                        <span
+                          style={{
+                            color: starColor,
+                            marginLeft: '8px',
+                            fontWeight: 'bold',
+                          }}
+                        >
+                          ★
+                        </span>
+                      )}
                     </FormLabel>
                   </Box>
 
@@ -935,12 +1019,13 @@ const handleMappingSubmit = async () => {
                       size="md"
                       bg="white"
                       value={mappedColumns[requiredColumn] || ''}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const newValue = e.target.value;
                         setMappedColumns((prev) => ({
                           ...prev,
-                          [requiredColumn]: e.target.value,
-                        }))
-                      }
+                          [requiredColumn]: newValue,
+                        }));
+                      }}
                     >
                       {availableColumns.map((col) => (
                         <option key={col} value={col}>
@@ -954,6 +1039,23 @@ const handleMappingSubmit = async () => {
             })}
           </VStack>
         </Box>
+        <Box mt={4} p={2} bg="gray.50" borderRadius="md">
+          <Box pl={5} mt={2} mb={2}>
+          <Text fontSize="sm" color="gray.500">
+            <li>
+              <span style={{ color: '#3182ce', fontWeight: 'bold' }}>★</span> Columns marked with a star were auto-mapped using similarity logic.
+            </li>
+            <li>
+              <span style={{ color: 'orange', fontWeight: 'bold' }}>★</span> If changed, the star will turn orange.
+            </li>
+            <li>
+              <span style={{ color: 'green', fontWeight: 'bold' }}>★</span> If mapped manually, the star will turn green.
+            </li>
+            </Text>
+          </Box>
+        </Box>
+
+
       </ModalBody>
       <ModalFooter>
         <Button
@@ -971,6 +1073,9 @@ const handleMappingSubmit = async () => {
     </ModalContent>
   </Modal>
 )}
+
+
+
 
 
 
