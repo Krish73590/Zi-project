@@ -18,10 +18,11 @@ import { keyframes } from '@emotion/react';
 
 const LastActivities = ({
   activities,
-  handleTabChange,
+  handleTableTypeChange,
   handlelogExport,
   gradientBg,
   hoverBg,
+  TableType
 }) => {
   const gradient = keyframes`
     0% { background-position: 0% 50%; }
@@ -42,33 +43,6 @@ const LastActivities = ({
       >
         Last Activities
       </Text>
-      <Tabs
-        onChange={handleTabChange}
-        defaultIndex={0}
-        colorScheme="teal"
-        variant="enclosed"
-      >
-        <TabList>
-          <Tab
-            _selected={{
-              bgGradient: gradientBg,
-              color: "white",
-              fontWeight: "bold",
-            }}
-          >
-            Company
-          </Tab>
-          <Tab
-            _selected={{
-              bgGradient: gradientBg,
-              color: "white",
-              fontWeight: "bold",
-            }}
-          >
-            Contact
-          </Tab>
-        </TabList>
-      </Tabs>
       <Box
         maxHeight="500px"
         // maxWidth="1400px"

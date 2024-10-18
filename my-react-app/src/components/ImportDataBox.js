@@ -28,6 +28,7 @@ import { ImDownload3 } from 'react-icons/im';
 import { utils, read, write } from 'xlsx';
 import { saveAs } from 'file-saver';
 import axios from 'axios';
+import { FaFileExport, FaFileImport, FaBuilding, FaAddressBook } from 'react-icons/fa';
 
 // Predefined import headers
 const contactImportHeaders  = [
@@ -102,7 +103,8 @@ const ImportDataBox = ({
   gradientBg,
   hoverBg,
   boxBg,
-  gradient
+  gradient,
+  TableType
 }) => {
   const toast = useToast();
   const [excelColumns, setExcelColumns] = useState([]);
@@ -112,23 +114,23 @@ const ImportDataBox = ({
   const [file, setFile] = useState(null);
   const [importloading, setImportLoading] = useState(false);
   const [initialMappedColumns, setInitialMappedColumns] = useState({}); // Track initial auto-mappings
-  const [ImporttableType, setImportTableType] = useState('Company');
+  // const [ImporttableType, setImportTableType] = useState('Company');
   const [isConfirmationOpen, setIsConfirmationOpen] = useState(false);
   const [availableColumnsForConfirmation, setAvailableColumnsForConfirmation] = useState([]);
 
-  const handleImportTabChange = (index) => {
-    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
-    setImportTableType(tabValues[index]);
-  };
+  // const handleImportTabChange = (index) => {
+  //   const tabValues = ['Company', 'Contact']; // Map the index to your tab values
+  //   setImportTableType(tabValues[index]);
+  // };
   const handleImportDownload = () => {
     const headers =
-      ImporttableType === 'Contact' ? contactImportHeaders : companyImportHeaders;
+    TableType === 'Contact' ? contactImportHeaders : companyImportHeaders;
     const worksheet = utils.aoa_to_sheet([headers]);
     const workbook = utils.book_new();
     utils.book_append_sheet(workbook, worksheet, 'Sheet1');
     const excelBuffer = write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-    saveAs(blob, `${ImporttableType}_import_sample_headers.xlsx`);
+    saveAs(blob, `${TableType}_import_sample_headers.xlsx`);
     toast({
       title: 'Download Started',
       description: 'Sample headers Excel file is being downloaded.',
@@ -157,10 +159,10 @@ const ImportDataBox = ({
     // Ensure unique headers
     setExcelColumns(parsedColumns);
     // console.log('Parsed Columns:', parsedColumns);
-    console.log(ImporttableType);
+    console.log(TableType);
     let updatedRequiredColumns = [];
-    if (ImporttableType === 'Contact') updatedRequiredColumns.push(...contactImportHeaders);
-    if (ImporttableType === 'Company') updatedRequiredColumns.push(...companyImportHeaders);
+    if (TableType === 'Contact') updatedRequiredColumns.push(...contactImportHeaders);
+    if (TableType === 'Company') updatedRequiredColumns.push(...companyImportHeaders);
 
     updatedRequiredColumns = [...new Set(updatedRequiredColumns)];
     setRequiredColumns(updatedRequiredColumns);
@@ -232,7 +234,7 @@ const submitMapping = async () => {
   }
 
   const formData = new FormData();
-  formData.append('table_type', ImporttableType);
+  formData.append('table_type', TableType);
   formData.append('column_mapping', JSON.stringify(reversedMapping));
   formData.append('file', file);
   console.log('sent_to_backend',JSON.stringify(reversedMapping))
@@ -306,7 +308,11 @@ const submitMapping = async () => {
   };
 
   return (
-    <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg}>
+    <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg}
+    w="100%"           // Ensures it takes the full width of the parent
+     minW="700px"       // Prevents shrinking below this width
+     maxW="700px"       // Prevents growing larger than this width
+     >
       <Text
         fontSize="4xl"
         fontWeight="bold"
@@ -316,55 +322,11 @@ const submitMapping = async () => {
         backgroundSize="200% 200%"
         mb={8}
       >
-        Import Data
+      <Icon as={FaFileImport} mr={2} />  Import {TableType} Data
       </Text>
 
       <Stack spacing={5}>
-        <Tabs
-          onChange={handleImportTabChange}
-          defaultIndex={0}
-          colorScheme="teal"
-          variant="enclosed"
-        >
-          <TabList>
-            <Tab
-              _selected={{
-                bgGradient: gradientBg,
-                color: "white",
-                fontWeight: "bold",
-              }}
-            >
-              Company
-            </Tab>
-            <Tab
-              _selected={{
-                bgGradient: gradientBg,
-                color: "white",
-                fontWeight: "bold",
-              }}
-            >
-              Contact
-            </Tab>
-          </TabList>
-        </Tabs>
-
-        <Button
-          onClick={handleImportDownload}
-          size="md"
-          bgGradient={gradientBg}
-          color="white"
-          _hover={{ bgGradient: hoverBg }}
-          _active={{ bgGradient: hoverBg }}
-          borderRadius="full"
-          boxShadow="md"
-          rightIcon={<Icon as={ImDownload3} boxSize={5} />}
-          px={6}
-          py={3}
-          maxW="fit-content"
-        >
-          Download {ImporttableType} Headers
-        </Button>
-
+        
         <FormControl>
         <FormLabel
             fontWeight="bold"
@@ -400,7 +362,7 @@ const submitMapping = async () => {
       onClick={handleImportSubmit}
       isDisabled={importloading}
     >
-      {importloading ? <Spinner size="sm" /> : `Import ${ImporttableType} Data`}
+      {importloading ? <Spinner size="sm" /> : `Import ${TableType} Data`}
     </Button>
       </Stack>
       {isModalOpen && (

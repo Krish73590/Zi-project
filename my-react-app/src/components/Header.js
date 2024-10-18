@@ -1,6 +1,7 @@
 import React from 'react';
-import { Flex, Text, Menu, MenuButton, Button, MenuList, MenuItem} from '@chakra-ui/react';
+import { Flex, Text, Menu, MenuButton, Button, MenuList, MenuItem, Box } from '@chakra-ui/react';
 import { ChevronDownIcon } from "@chakra-ui/icons";
+
 const Header = ({ user, handleLogout }) => (
   <Flex
     position="fixed"
@@ -11,13 +12,24 @@ const Header = ({ user, handleLogout }) => (
     bg="rgba(255, 255, 255, 0.1)"
     backdropFilter="blur(10px)"
     borderRadius="md"
-    boxShadow="0 4px 6px rgba(0, 0, 0, 0.1)"
     p={4}
     zIndex="1000"
   >
-    <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="medium" color="gray.800">
-      ZoomInfo Data Platform
+    {/* Empty Box to balance the layout */}
+    <Box flex="1" />
+
+    {/* Centered Text */}
+    <Text
+      fontSize={{ base: "2xl", md: "3xl" }}
+      fontWeight="medium"
+      color="gray.800"
+      textAlign="center"
+      ml="4%"
+    >
+      iA-ZI Data Platform
     </Text>
+    <Box flex="1" />
+    {/* Menu for user actions */}
     <Menu>
       <MenuButton
         as={Button}
@@ -36,6 +48,9 @@ const Header = ({ user, handleLogout }) => (
         <MenuItem onClick={handleLogout}>Logout</MenuItem>
       </MenuList>
     </Menu>
+
+    {/* Another empty Box to balance the layout */}
+    
   </Flex>
 );
 

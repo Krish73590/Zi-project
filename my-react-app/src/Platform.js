@@ -12,6 +12,15 @@ import {
   Divider,
   useColorModeValue,
   keyframes,
+  Flex,
+  Text,
+  Button,
+  Tabs,
+  TabList,
+  Tab,
+  Heading,
+  Icon,
+  TabIndicator 
 } from '@chakra-ui/react';
 import axios from 'axios';
 import { saveAs } from 'file-saver'; 
@@ -19,22 +28,27 @@ import * as XLSX from 'xlsx';
 import AuthContext from './AuthContext'; 
 import { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FaFileExport, FaFileImport, FaBuilding, FaAddressBook } from 'react-icons/fa';
+
 const Platform = () => {
   const toast = useToast();
-  const [logtableType, setlogTableType] = useState('Company');
+  // const [TableType, setTableType] = useState('Company');
   const [activities, setActivities] = useState([]);
   const { user, logout } = useContext(AuthContext);
   const navigate = useNavigate();
-  
+  // const [action, setAction] = useState('Export'); // Default action to 'Export'
+  const [selectedTab, setSelectedTab] = useState({ action: 'Export', tableType: 'Contact' });
+
+  // const [dataType, setDataType] = useState('Company'); // 'company' or 'contact'
   const handleLogout = () => {
     logout(); // Clear user data from context and local storage
     navigate('/'); // Redirect to login page
   };
-  
+
 
   useEffect(() => {
     // console.log(`Fetching data for tableType: ${logtableType}`);
-    axios.get(`${process.env.REACT_APP_API_URL}/user/last-activities/?table_type=${logtableType}`)
+    axios.get(`${process.env.REACT_APP_API_URL}/user/last-activities/?table_type=${selectedTab.tableType}`)
       .then(response => {
         // console.log('Data fetched:', response.data);
         setActivities(response.data);
@@ -42,7 +56,7 @@ const Platform = () => {
       .catch(error => {
         console.error('Error fetching activities:', error);
       });
-  }, [logtableType]);
+  }, [selectedTab.tableType]);
 
   const handlelogExport = async (activity) => {
     try {
@@ -93,10 +107,10 @@ const Platform = () => {
     }
   };
 
-  const handleLogTabChange = (index) => {
-    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
-    setlogTableType(tabValues[index]);
-  };
+  // const handleTableTypeChange = (index) => {
+  //   const tabValues = ['Company', 'Contact']; // Map the index to your tab values
+  //   setTableType(tabValues[index]);
+  // };
 
 
 
@@ -116,40 +130,74 @@ const Platform = () => {
     100% { background-position: 0% 50%; }
   `;
 
-  
-
-
-
+  const handleTabChange = (index) => {
+    const tabOptions = [
+      { action: 'Export', tableType: 'Contact' },
+      { action: 'Export', tableType: 'Company' },
+      { action: 'Import', tableType: 'Contact' },
+      { action: 'Import', tableType: 'Company' },
+    ];
+    setSelectedTab(tabOptions[index]);
+  };
   
  
   return (<>
-    <Header user={user} handleLogout={handleLogout} />
-    <Box mt="80px"> 
-      <VStack spacing={6} p={4} align="stretch">
-        <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
-        <ImportDataBox
-            gradientBg={gradientBg}
-            hoverBg={hoverBg}
-            boxBg={boxBg}
-            gradient={gradient}
-          />
-        <Divider orientation={{ base: 'horizontal', md: 'vertical' }} />
-        {user?.role === 'user_a'?<ExportDataBoxUserA
-        gradientBg={gradientBg}
-        hoverBg={hoverBg}
-        gradient={gradient}
-        />: <ExportDataBoxUserB
-        gradientBg="linear(to-r, teal.400, blue.400)"
-        hoverBg="linear(to-r, teal.500, blue.500)"
-        gradient="rotate(45deg, teal.500, blue.500)"
-        boxBg="gray.50"
-      />
-      }
+    {/* <Header user={user} handleLogout={handleLogout} /> */}        
+    
+      <Box mt="90px">
+          <Header user={user} handleLogout={handleLogout} />
+
+      <Flex direction={{ base: 'column', md: 'row' }} justify="center" gap={10} align="center">
         
-      </Stack>
+        {/* First set of Tabs: Export/Import */}
+        <Box width={{ base: '100%', md: '100%' }}>
+        <Tabs onChange={handleTabChange} defaultIndex={0} position='relative' variant='unstyled' align="center" isFitted>
+          <TabList>
+            <Tab>
+              <Icon as={FaAddressBook} mr={2} /> Contact - Export
+            </Tab>
+            <Tab>
+              <Icon as={FaBuilding} mr={2} /> Company - Export
+            </Tab>
+            <Tab>
+              <Icon as={FaAddressBook} mr={2} /> Contact - Import
+            </Tab>
+            <Tab>
+              <Icon as={FaBuilding} mr={2} /> Company - Import
+            </Tab>
+          </TabList>
+          <TabIndicator mt='-1.5px' height='5px' bg='blue.500' borderRadius='5px' />
+          </Tabs>
+        </Box>
+      </Flex>
+        <VStack spacing={6} p={4}  align="stretch">
+          <VStack spacing={6} p={4}  align="center" w="50%" mx="auto">
+
+          {selectedTab.action === 'Export' ? (
+             <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
+             {user?.role === 'user_a' ? (
+               <ExportDataBoxUserA gradientBg={gradientBg} hoverBg={hoverBg} boxBg={boxBg} gradient={gradient} />
+             ) : (
+               <ExportDataBoxUserB
+               gradientBg={gradientBg}
+                 hoverBg={hoverBg}
+                 gradient={gradient}
+                 boxBg={boxBg}
+                 TableType={selectedTab.tableType}
+               />
+             )}
+           </Stack>
+            
+          ) : (
+            <Stack direction={{ base: 'column', md: 'row' }} spacing={8}>
+            <ImportDataBox gradientBg={gradientBg} hoverBg={hoverBg} boxBg={boxBg} gradient={gradient} TableType={selectedTab.tableType} />
+          </Stack>
+          )}
+          </VStack>
+      <Divider orientation={{ base: 'horizontal', md: 'vertical' }} />
         <LastActivities
         activities={activities}
-        handleTabChange={handleLogTabChange}
+        handleTabChange={handleTabChange}
         handlelogExport={handlelogExport}
         gradientBg={gradientBg}
         hoverBg={hoverBg}

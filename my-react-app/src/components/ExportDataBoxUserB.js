@@ -47,17 +47,17 @@ import { utils, write } from 'xlsx';
 import { useOutsideClick } from '@chakra-ui/react';
 import { useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { FaFileExport } from 'react-icons/fa';
 
 const ExportDataBoxUserB = ({
   gradientBg,
   hoverBg,
   gradient,
   boxBg,
+  TableType
 }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const contactExportHeaders  = ["domain",	"first_name",	"last_name",	"linkedin_url",	"zi_contact_id"]; 
-  const companyExportHeaders = ["domain","company_name"];
   const toast = useToast();
   const handleFileChange = (e) => setFile(e.target.files[0]);
   const [file, setFile] = useState(null);
@@ -66,7 +66,6 @@ const ExportDataBoxUserB = ({
   const [totalPages, setTotalPages] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [displayedResults, setDisplayedResults] = useState([]);
-  const [ExporttableType, setExportTableType] = useState('Company');
   const [selectedColumns, setSelectedColumns] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [unselectAll, setUnselectAll] = useState(false);
@@ -79,8 +78,6 @@ const ExportDataBoxUserB = ({
   const [matchCompanyName, setMatchCompanyName] = useState(false);
   const [matchZIContactID, setMatchZIContactID] = useState(false);
   const [matchZICompanyID, setmatchZICompanyID] = useState(false);
-  // const allContactColumns = ["tbl_zoominfo_paid_id","ZoomInfo Contact ID","Last Name","First Name","Middle Name","Salutation","Suffix","Job Title","Job Title Hierarchy Level","Management Level","Job Start Date","Buying Committee","Job Function","Department","Company Division Name","Direct Phone Number","Email Address","Email Domain","Mobile phone","Last Job Change Type","Last Job Change Date","Previous Job Title","Previous Company Name","Previous Company ZoomInfo Company ID","Previous Company LinkedIn Profile","Highest Level of Education","Contact Accuracy Score","Contact Accuracy Grade","ZoomInfo Contact Profile URL","LinkedIn Contact Profile URL","Notice Provided Date","Person Street","Person City","Person State","Person Zip Code","Country","ZoomInfo Company ID","Company Name","Company Description","Website","Founded Year","Company HQ Phone","Fax","Ticker","Revenue (in 000s USD)","Revenue Range (in USD)","Est. Marketing Department Budget (in 000s USD)","Est. Finance Department Budget (in 000s USD)","Est. IT Department Budget (in 000s USD)","Est. HR Department Budget (in 000s USD)","Employees","Employee Range","Past 1 Year Employee Growth Rate","Past 2 Year Employee Growth Rate","SIC Code 1","SIC Code 2","SIC Codes","NAICS Code 1","NAICS Code 2","NAICS Codes","Primary Industry","Primary Sub-Industry","All Industries","All Sub-Industries","Industry Hierarchical Category","Secondary Industry Hierarchical Category","Alexa Rank","ZoomInfo Company Profile URL","LinkedIn Company Profile URL","Facebook Company Profile URL","Twitter Company Profile URL","Ownership Type","Business Model","Certified Active Company","Certification Date","Total Funding Amount (in 000s USD)","Recent Funding Amount (in 000s USD)","Recent Funding Round","Recent Funding Date","Recent Investors","All Investors","Company Street Address","Company City","Company State","Company Zip Code","Company Country","Full Address","Number of Locations","Query Name","created_date","Direct Phone Number_Country","Mobile phone_Country","db_file_name","Company HQ Phone_Country","File Name","Contact/Phone","Final Remarks","member_id","Project TAG","Full Name","Buying Group" ]
-  // const allCompanyColumns = ['tbl_zoominfo_company_paid_id',	'ZoomInfo Company ID',	'Company Name',	'Website',	'Founded Year',	'Company HQ Phone']
   const [uploadedFileName, setUploadedFileName] = useState('results');
   const [requiredColumns, setrequiredColumns] = useState([]); 
   const [excelColumns, setexcelColumns] = useState([]); 
@@ -92,42 +89,6 @@ const ExportDataBoxUserB = ({
 
 
 
-
-
-  const handleExportDownload = () => {
-    let headers;
-
-    if (ExporttableType === 'Contact') {
-        headers = contactExportHeaders;
-    } else if (ExporttableType === 'Company') {
-        headers = companyExportHeaders;
-    }
-
-    // Create a worksheet
-    const worksheet = utils.aoa_to_sheet([headers]);
-
-    // Create a new workbook and append the worksheet
-    const workbook = utils.book_new();
-    utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-
-    // Generate an Excel file (binary string)
-    const excelBuffer = write(workbook, { bookType: 'xlsx', type: 'array' });
-
-    // Create a Blob from the Excel buffer
-    const blob = new Blob([excelBuffer], { type: 'application/octet-stream' });
-
-    // Save the file
-    saveAs(blob, `${ExporttableType}_export_sample_headers.xlsx`);
-
-    // Show a toast notification
-    toast({
-        title: 'Download Started',
-        description: 'Sample headers Excel file is being downloaded.',
-        status: 'info',
-        duration: 2000,
-        isClosable: true,
-    });
-};
 
 const parseExcelFile = (file) => {
   return new Promise((resolve, reject) => {
@@ -275,7 +236,7 @@ const handleMappingSubmit = async () => {
 
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('table_type', ExporttableType);
+  formData.append('table_type', TableType);
   formData.append('selected_columns', selectedColumns.join(','));
   formData.append('match_contact_only_domain', matchContactOnlyDomain);
   formData.append('match_contact_domain', matchContactDomain);
@@ -347,35 +308,30 @@ const frontendColumnNames = {
   company_name: 'Company Name',
 };
 
-  const handleExportTabChange = (index) => {
-    const tabValues = ['Company', 'Contact']; // Map the index to your tab values
-    setExportTableType(tabValues[index]);
+  useEffect(() => {
+    // Reset all the state whenever TableType changes
+    setMatchCompanyDomain(false);
+    setMatchCompanyName(false);
+    setmatchZICompanyID(false);
+    setMatchZIContactID(false);
+    setMatchContactDomain(false);
+    setMatchContactOnlyDomain(false);
+    setMatchLinkedinUrl(false);
+    setSelectedColumns([]);
+    setSelectAll(false);
+    setUnselectAll(false);
+  }, [TableType]);  // Dependency on TableType
 
-    // Reset checkbox states on tab switch
-  setMatchCompanyDomain(false);
-  setMatchCompanyName(false);
-  setmatchZICompanyID(false);
-  setMatchZIContactID(false);
-  setMatchContactDomain(false);
-  setMatchContactOnlyDomain(false);
-  setMatchLinkedinUrl(false);
-  
-  setSelectedColumns([]);
-  setSelectAll(false);
-  setUnselectAll(false);
-  };
 
   useEffect(() => {
     const fetchColumns = async () => {
       try {
-        const endpoint = ExporttableType === 'Company' ? '/company-columns/' : '/contact-columns/';
+        const endpoint = TableType === 'Company' ? '/company-columns/' : '/contact-columns/';
         const response = await axios.get(`${process.env.REACT_APP_API_URL}${endpoint}`);
         // Ensure unique columns
         const uniqueColumns = [...new Set(response.data.columns)];
-        if (ExporttableType === 'Company') {
+        if (TableType === 'Company') {
           setCompanyColumns(uniqueColumns);
-          // console.log("Current tableType:", ExporttableType);
-          // console.log("dfsfsd", uniqueColumns);
         } else {
           setContactColumns(uniqueColumns);
         }
@@ -392,36 +348,36 @@ const frontendColumnNames = {
     };
 
     fetchColumns();
-  }, [toast, ExporttableType]);
+  }, [toast, TableType]);
 
 
 
   useEffect(() => {
-    if (ExporttableType === 'Company') {
+    if (TableType === 'Company') {
       setSelectedColumns([]);
     }
-  }, [ ExporttableType]);
+  }, [ TableType]);
 
   useEffect(() => {
-    if (ExporttableType === 'Contact') {
+    if (TableType === 'Contact') {
       setSelectedColumns([]);
     }
-  }, [ ExporttableType]);
+  }, [ TableType]);
 
   useEffect(() => {
-    if (selectAll && ExporttableType === 'Contact') {
+    if (selectAll && TableType === 'Contact') {
       setSelectedColumns(Contactcolumns);
     }
-  }, [selectAll, Contactcolumns, ExporttableType]);
+  }, [selectAll, Contactcolumns, TableType]);
   
   useEffect(() => {
-    if (unselectAll && ExporttableType === 'Contact') {
+    if (unselectAll && TableType === 'Contact') {
       setSelectedColumns([]);
     }
-  }, [unselectAll, ExporttableType]);
+  }, [unselectAll, TableType]);
 
   useEffect(() => {
-    if (ExporttableType === 'Contact') {
+    if (TableType === 'Contact') {
       if (selectedColumns.length === Contactcolumns.length) {
         setSelectAll(false);
         setUnselectAll(false);
@@ -433,22 +389,22 @@ const frontendColumnNames = {
         setUnselectAll(false);
       }
     }
-  }, [selectedColumns, Contactcolumns, ExporttableType]);
+  }, [selectedColumns, Contactcolumns, TableType]);
   
   useEffect(() => {
-    if (selectAll && ExporttableType === 'Company') {
+    if (selectAll && TableType === 'Company') {
       setSelectedColumns(Companycolumns);
     }
-  }, [selectAll, Companycolumns, ExporttableType]);
+  }, [selectAll, Companycolumns, TableType]);
   
   useEffect(() => {
-    if (unselectAll && ExporttableType === 'Company') {
+    if (unselectAll && TableType === 'Company') {
       setSelectedColumns([]);
     }
-  }, [unselectAll, ExporttableType]);
+  }, [unselectAll, TableType]);
   
   useEffect(() => {
-    if (ExporttableType === 'Company') {
+    if (TableType === 'Company') {
       if (selectedColumns.length === Companycolumns.length) {
         setSelectAll(false);
         setUnselectAll(false);
@@ -460,7 +416,7 @@ const frontendColumnNames = {
         setUnselectAll(false);
       }
     }
-  }, [selectedColumns, Companycolumns, ExporttableType]);
+  }, [selectedColumns, Companycolumns, TableType]);
 
   const handleRemoveColumn = (col) => {
     setSelectedColumns(selectedColumns.filter(column => column !== col));
@@ -499,7 +455,11 @@ const frontendColumnNames = {
 
   return (
     <>
-    <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg}>
+    <Box flex={1} p={6} borderWidth={1} borderRadius="lg" boxShadow="lg" bg={boxBg}
+     w="100%"           // Ensures it takes the full width of the parent
+     minW="700px"       // Prevents shrinking below this width
+     maxW="700px"       // Prevents growing larger than this width
+     >
       <Text
         fontSize="4xl"
         fontWeight="bold"
@@ -509,47 +469,9 @@ const frontendColumnNames = {
         backgroundSize="200% 200%"
         mb={8}
       >
-        Export Data
+      <Icon as={FaFileExport} mr={2} />  Export {TableType} Data
       </Text>
       <Stack spacing={5}>
-        <Tabs onChange={handleExportTabChange} defaultIndex={0} colorScheme="teal" variant="enclosed">
-          <TabList>
-            <Tab
-              _selected={{
-                bgGradient: gradientBg,
-                color: 'white',
-                fontWeight: 'bold',
-              }}
-            >
-              Company
-            </Tab>
-            <Tab
-              _selected={{
-                bgGradient: gradientBg,
-                color: 'white',
-                fontWeight: 'bold',
-              }}
-            >
-              Contact
-            </Tab>
-          </TabList>
-        </Tabs>
-        <Button
-          onClick={handleExportDownload}
-          size="md"
-          bgGradient={gradientBg}
-          color="white"
-          _hover={{ bgGradient: hoverBg }}
-          _active={{ bgGradient: hoverBg }}
-          borderRadius="full"
-          boxShadow="md"
-          rightIcon={<Icon as={ImDownload3} boxSize={5} />}
-          px={6}
-          py={3}
-          maxW="fit-content"
-        >
-          Download {ExporttableType} Headers
-        </Button>
         <FormControl>
           <FormLabel
             fontWeight="bold"
@@ -578,7 +500,7 @@ const frontendColumnNames = {
           </Box>
         </FormControl>
         {/* Column Selection */}
-        {ExporttableType === 'Company' ? (
+        {TableType === 'Company' ? (
           <>
             <FormControl>
               <Popover isOpen={isPopoverOpen} onOpen={() => setIsPopoverOpen(true)} onClose={() => setIsPopoverOpen(false)} closeOnBlur={true}>
@@ -597,7 +519,7 @@ const frontendColumnNames = {
                     transition="all 0.2s ease-in-out"
                     _focus={{ boxShadow: 'outline' }}
                   >
-                    Select {ExporttableType} Columns
+                    Select {TableType} Columns
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent ref={popoverRef}
@@ -749,7 +671,7 @@ const frontendColumnNames = {
                   setUnselectAll(false);
                 }}
               >
-                <Stack spacing={4} mb={4}>
+                <Stack direction="row" spacing={8} mb={6}>
                   <Radio value="email">Email</Radio>
                   <Radio value="phone">Phone</Radio>
                   <Radio value="other">Other</Radio>
@@ -769,7 +691,7 @@ const frontendColumnNames = {
                     py={3}
                     maxW="fit-content"
                   >
-                    Select {ExporttableType} Columns
+                    Select {TableType} Columns
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent ref={popoverRef}
@@ -956,7 +878,7 @@ const frontendColumnNames = {
       onClick={handleExportSubmit}
       isDisabled={exportloading}
     >
-      {exportloading ? <Spinner size="sm" /> : `Export ${ExporttableType} Data`}
+      {exportloading ? <Spinner size="sm" /> : `Export ${TableType} Data`}
     </Button>
 
     {isModalOpen && (

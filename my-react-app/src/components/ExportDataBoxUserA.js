@@ -53,13 +53,14 @@ const ExportDataBoxUserA = ({
   gradient,
   gradientBg,
   hoverBg,
+  boxBg
 }) => {
   const contactExportHeaders  = ["domain",	"first_name",	"last_name",	"linkedin_url",	"zi_contact_id"]; 
   const companyExportHeaders = ["domain","company_name"];
   const toast = useToast();
   const handleFileChange = (e) => setFile(e.target.files[0]);
   const [file, setFile] = useState(null);
-  const boxBg = useColorModeValue("white", "gray.800"); // Move this inside the component
+  // const boxBg = useColorModeValue("white", "gray.800"); // Move this inside the component
   const [isPopoverOpen, setIsPopoverOpen] = useState(false); 
   const [exportloading, setexportLoading] = useState(false);
   const [results, setResults] = useState([]);
