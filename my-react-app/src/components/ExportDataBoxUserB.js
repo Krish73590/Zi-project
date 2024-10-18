@@ -419,8 +419,42 @@ const frontendColumnNames = {
   }, [selectedColumns, Companycolumns, TableType]);
 
   const handleRemoveColumn = (col) => {
-    setSelectedColumns(selectedColumns.filter(column => column !== col));
+    // Remove the selected column
+    const updatedColumns = selectedColumns.filter(column => column !== col);
+    
+    // Update the selectedColumns state
+    setSelectedColumns(updatedColumns);
+  
+    // Predefined column sets for email and phone
+    const emailSet = new Set([
+      'ZoomInfo Contact ID', 'First Name', 'Last Name', 
+      'Website', 'LinkedIn Contact Profile URL', 
+      'Company Name', 'ZoomInfo Company ID', 'Email Address'
+    ]);
+  
+    const phoneSet = new Set([
+      'ZoomInfo Contact ID', 'First Name', 'Last Name', 
+      'Website', 'LinkedIn Contact Profile URL', 
+      'Company Name', 'ZoomInfo Company ID', 
+      'Mobile phone', 'Direct Phone Number', 'Company HQ Phone'
+    ]);
+  
+    // Check if the remaining selected columns match emailSet or phoneSet
+    if (
+      updatedColumns.length === emailSet.size && 
+      updatedColumns.every((val) => emailSet.has(val))
+    ) {
+      setRadioValue('email');  // If it matches emailSet, set radio to 'email'
+    } else if (
+      updatedColumns.length === phoneSet.size && 
+      updatedColumns.every((val) => phoneSet.has(val))
+    ) {
+      setRadioValue('phone');  // If it matches phoneSet, set radio to 'phone'
+    } else {
+      setRadioValue('other');  // If it doesn't match either, set radio to 'other'
+    }
   };
+  
 
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
@@ -469,7 +503,7 @@ const frontendColumnNames = {
         backgroundSize="200% 200%"
         mb={8}
       >
-      <Icon as={FaFileExport} mr={2} />  Export {TableType} Data
+      <Icon as={FaFileExport} mr={2} color="teal.500" boxSize={6} />  Export {TableType} Data
       </Text>
       <Stack spacing={5}>
         <FormControl>
@@ -736,17 +770,19 @@ const frontendColumnNames = {
                       ]);
 
                       if (
-                        values.length !== emailSet.size || 
-                        !values.every((val) => emailSet.has(val))
+                        values.length === emailSet.size && 
+                        values.every((val) => emailSet.has(val))
                       ) {
-                        if (
-                          values.length !== phoneSet.size || 
-                          !values.every((val) => phoneSet.has(val))
-                        ) {
-                          setRadioValue('other');
-                        }
+                        setRadioValue('email');
+                      } else if (
+                        values.length === phoneSet.size && 
+                        values.every((val) => phoneSet.has(val))
+                      ) {
+                        setRadioValue('phone');
+                      } else {
+                        setRadioValue('other');
                       }
-                      }}
+                    }}
                     >
                       <Stack spacing={2}>
                         <Checkbox

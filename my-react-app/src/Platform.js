@@ -28,7 +28,7 @@ import * as XLSX from 'xlsx';
 import AuthContext from './AuthContext'; 
 import { useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaFileExport, FaFileImport, FaBuilding, FaAddressBook } from 'react-icons/fa';
+import { FaBuilding, FaAddressBook } from 'react-icons/fa';
 
 const Platform = () => {
   const toast = useToast();
@@ -153,20 +153,28 @@ const Platform = () => {
         <Box width={{ base: '100%', md: '100%' }}>
         <Tabs onChange={handleTabChange} defaultIndex={0} position='relative' variant='unstyled' align="center" isFitted>
           <TabList>
-            <Tab>
-              <Icon as={FaAddressBook} mr={2} /> Contact - Export
+            <Tab fontSize="lg" fontWeight="bold"> 
+              <Icon as={FaAddressBook} mr={2} /> Contact - Export 
             </Tab>
-            <Tab>
+            <Tab fontSize="lg" fontWeight="bold">
               <Icon as={FaBuilding} mr={2} /> Company - Export
             </Tab>
-            <Tab>
+            <Tab fontSize="lg" fontWeight="bold">
               <Icon as={FaAddressBook} mr={2} /> Contact - Import
             </Tab>
-            <Tab>
+            <Tab fontSize="lg" fontWeight="bold">
               <Icon as={FaBuilding} mr={2} /> Company - Import
             </Tab>
           </TabList>
-          <TabIndicator mt='-1.5px' height='5px' bg='blue.500' borderRadius='5px' />
+          {/* <TabIndicator mt='-1.5px' height='5px' bg='blue.500' borderRadius='5px' /> */}
+          <TabIndicator
+      mt='-1.5px'
+      height='5px'
+      borderRadius='5px'
+      bgGradient="linear(to-r, teal.400, blue.400, pink.400)" // Use your gradient here
+      backgroundSize="200% 200%" // To make the gradient move
+      animation={`${gradient} 4s ease infinite`} // Apply the existing animation
+    />
           </Tabs>
         </Box>
       </Flex>

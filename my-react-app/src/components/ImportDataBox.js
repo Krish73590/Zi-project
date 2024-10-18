@@ -322,7 +322,7 @@ const submitMapping = async () => {
         backgroundSize="200% 200%"
         mb={8}
       >
-      <Icon as={FaFileImport} mr={2} />  Import {TableType} Data
+      <Icon as={FaFileImport} mr={2} color="teal.500" boxSize={6} />  Import {TableType} Data
       </Text>
 
       <Stack spacing={5}>
@@ -366,13 +366,21 @@ const submitMapping = async () => {
     </Button>
       </Stack>
       {isModalOpen && (
-  <Modal onClose={() => setIsModalOpen(false)} isOpen={isModalOpen} size="lg">
+  <Modal onClose={() => setIsModalOpen(false)} isOpen={isModalOpen} size="3xl">
     <ModalOverlay />
     <ModalContent>
       <ModalHeader>Map Columns</ModalHeader>
       <ModalCloseButton />
       <ModalBody>
-        <Box as="form" pt={4}>
+      <Flex justifyContent="space-between" alignItems="center" mb={4}>
+        <Box w="40%" pr={4} lm={10}>
+          <Text fontWeight="bold" fontSize="md" color="gray.700">iA Fields</Text> {/* iA Fields Header */}
+        </Box>
+        <Box w="55%">
+          <Text fontWeight="bold" fontSize="md" color="gray.700">Excel Headers</Text> {/* Excel Headers Header */}
+        </Box>
+      </Flex>
+        <Box as="form" pt={4}    >
           <VStack spacing={6} align="stretch">
             {requiredColumns.map((requiredColumn) => {
               const usedColumns = Object.values(mappedColumns).filter(
@@ -419,7 +427,7 @@ const submitMapping = async () => {
                     </FormLabel>
                   </Box>
 
-                  <Box w="60%">
+                  <Box w="60%" ml={10}>
                     <Select
                       placeholder="Select a column"
                       size="md"
