@@ -322,7 +322,7 @@ const submitMapping = async () => {
         backgroundSize="200% 200%"
         mb={8}
       >
-      <Icon as={FaFileImport} mr={2} color="teal.500" boxSize={6} />  Import {TableType} Data
+      <Icon as={FaFileImport} mr={2} color="blue.500" boxSize={6} />  Import {TableType} Data
       </Text>
 
       <Stack spacing={5}>

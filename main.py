@@ -341,7 +341,16 @@ async def process_upload(
         
     # Step 1: Read and Validate Excel File
     try:
-        df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+        file_extension = filename.split('.')[-1].lower()
+
+        # Process XLSX files
+        if file_extension == 'xlsx':
+            df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+
+        # Process CSV files
+        elif file_extension == 'csv':
+            df = pd.read_csv(BytesIO(await file.read()))
+        # df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
         df = df.where(pd.notnull(df), None)
         df.rename(columns=column_mapping_dict, inplace=True)
         df = df.map(lambda x: str(int(x)) if isinstance(x, (int, float)) and not pd.isnull(x) else str(x))
@@ -615,8 +624,17 @@ async def process_company_upload(
         
     # Step 1: Read and Validate Excel File
     try:
+        file_extension = filename.split('.')[-1].lower()
+
+        # Process XLSX files
+        if file_extension == 'xlsx':
+            df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+
+        # Process CSV files
+        elif file_extension == 'csv':
+            df = pd.read_csv(BytesIO(await file.read()))
             # Read Excel file into DataFrame
-        df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
+        # df = pd.read_excel(BytesIO(await file.read()), engine='openpyxl')
         df = df.where(pd.notnull(df), None)
         df.rename(columns=column_mapping_dict, inplace=True)
         df = df.map(lambda x: str(int(x)) if isinstance(x, (int, float)) and not pd.isnull(x) else str(x))

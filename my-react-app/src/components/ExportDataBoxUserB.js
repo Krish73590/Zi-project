@@ -463,19 +463,36 @@ const frontendColumnNames = {
     setDisplayedResults(results.slice(startIndex, endIndex));
   };
 
-  const handleExport = () => {
-    const csvRows = [];
-    const headers = Object.keys(results[0] || {}).join(',');
-    csvRows.push(headers);
-
-    results.forEach(result => {
-      const row = Object.values(result).map(value => `"${value}"`).join(',');
-      csvRows.push(row);
-    });
-
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv' });
-    saveAs(blob, `${uploadedFileName}_results.csv`);
+  const handleExport = (format) => {
+    if (!results || results.length === 0) {
+      return; // No results to export
+    }
+  
+    if (format === 'csv') {
+      // Export as CSV
+      const csvRows = [];
+      const headers = Object.keys(results[0] || {}).join(',');
+      csvRows.push(headers);
+  
+      results.forEach(result => {
+        const row = Object.values(result).map(value => `"${value}"`).join(',');
+        csvRows.push(row);
+      });
+  
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv' });
+      saveAs(blob, `${uploadedFileName}_results.csv`);
+  
+    } else if (format === 'xlsx') {
+      // Export as XLSX
+      const worksheet = XLSX.utils.json_to_sheet(results);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+  
+      const xlsxBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([xlsxBuffer], { type: 'application/octet-stream' });
+      saveAs(blob, `${uploadedFileName}_results.xlsx`);
+    }
   };
 
   const popoverRef = useRef();

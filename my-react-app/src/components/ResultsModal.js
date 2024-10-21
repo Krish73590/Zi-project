@@ -113,22 +113,37 @@ const ResultsModal = ({
               </Stack>
 
               {/* Export Button */}
-              <Flex justifyContent="center">
-                <Button
-                  size="md" 
-                  bgGradient={gradientBg}
-                  color="white"
-                  _hover={{ bgGradient: hoverBg }}
-                  _active={{ bgGradient: hoverBg }}
-                  borderRadius="full"
-                  boxShadow="md"
-                  px={6}
-                  py={3}
-                  maxW="250"
-                  onClick={handleExport}
-                >
-                  Export All Records
-                </Button>
+              <Flex justifyContent="center" gap={6}>
+              <Button
+                size="md"
+                bgGradient={gradientBg}
+                color="white"
+                _hover={{ bgGradient: hoverBg }}
+                _active={{ bgGradient: hoverBg }}
+                borderRadius="full"
+                boxShadow="md"
+                px={6}
+                py={3}
+                maxW="250"
+                onClick={() => handleExport('csv')}
+              >
+                Export as CSV
+              </Button>
+              <Button
+                size="md"
+                bgGradient={gradientBg}
+                color="white"
+                _hover={{ bgGradient: hoverBg }}
+                _active={{ bgGradient: hoverBg }}
+                borderRadius="full"
+                boxShadow="md"
+                px={6}
+                py={3}
+                maxW="250"
+                onClick={() => handleExport('xlsx')}
+              >
+                Export as XLSX
+              </Button>
               </Flex>
             </VStack>
           ) : (
