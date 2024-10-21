@@ -1018,13 +1018,13 @@ const frontendColumnNames = {
           <Box pl={5} mt={2} mb={2}>
           <Text fontSize="sm" color="gray.500">
             <li>
-              <span style={{ color: '#3182ce', fontWeight: 'bold' }}>★</span> Columns marked with a star were auto-mapped using similarity logic.
+              <span style={{ color: '#3182ce', fontWeight: 'bold' }}>★</span> represents automatically mapped columns.
             </li>
             <li>
-              <span style={{ color: 'orange', fontWeight: 'bold' }}>★</span> If changed, the star will turn orange.
+              <span style={{ color: 'orange', fontWeight: 'bold' }}>★</span> represents a modified match of auto-mapped columns.
             </li>
             <li>
-              <span style={{ color: 'green', fontWeight: 'bold' }}>★</span> If mapped manually, the star will turn green.
+              <span style={{ color: 'green', fontWeight: 'bold' }}>★</span> represents manually mapped columns .
             </li>
             </Text>
           </Box>
